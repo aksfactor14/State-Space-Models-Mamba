@@ -97,5 +97,15 @@ Usually we never work with continuous signals, but always with discrete ones (li
 
 ### 2.2 Discretization ###
 
+Your text, audio waveform, or sensor readings aren't a smooth continuous signal — they're a discrete sequence of tokens or samples: $u_0, u_1, u_2, ...$ arriving at fixed intervals. To run an SSM on real data, you need to *discretize* it — convert those continuous matrices (A,B,C) into discrete counterparts $(\bar{A}, \bar{B}, \bar{C})$  that can step through a sequence one token at a time.
 
-      
+**The Step Size $\Delta$**: Represents the time interval between two consecutive inputs. Conceptually, you can think of each discrete input $u_k = u(k\Delta)$​ as a *sample* of an underlying continuous signal at time t=kΔ.
+A small Δ: means you're sampling densely — high resolution. A large Δ means coarser steps — the model "skips" more of the underlying dynamics between tokens.
+
+<img width="720" height="233" alt="image" src="https://github.com/user-attachments/assets/925eff2e-99a6-4a83-a50c-23a15836c40b" />
+
+The discretization method they use is called Bilinear method: it approximates the continuous derivative $h'(t)$ using the trapezoidal rule — averaging the state at the beginning and end of the interval. We will not go into the derivation of it but the final matrices after discretization will be:
+
+<img width="575" height="155" alt="image" src="https://github.com/user-attachments/assets/360857a7-29f7-4946-a103-246b40fbaa13" />
+
+So, SSM equation ius now a sequence-to-sequence map $u_k → y_k$ instead of function-to-function. Moreover the state equation is now a recurrence in $x_k$, allowing the discrete SSM to be computed like an RNN. $x_k ∈ R^N$ can be viewed as a hidden state with transition matrix A.
