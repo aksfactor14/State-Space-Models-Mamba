@@ -93,13 +93,13 @@ This state space model is linear and time invariant. Linear because the relation
 
 Note: for now consider A, B, C, D, x(t), h(t) and y(t) to be numbers, not vectors. Later we will extend our analysis to vectors.
 
-**Significance of Matrix A**: The A matrix in the state space model can be thought of as a matrix that “captures” information from the previous state to build the new state. It determines how this information is propagated over time. Because of this, its structure must be designed carefully—otherwise, it may fail to effectively retain the history of past inputs, which is essential for generating accurate future outputs. To make the A matrix behave well, the authors chose to use the HIPPO theory. Let’s see how it works!
+**Significance of Matrix A**: The A matrix in the SSM “captures” information from the previous state to build the new state. It determines how this information is propagated over time. Because of this, its structure must be designed carefully—otherwise, it may fail to effectively retain the history of past inputs. To make the A matrix behave well, the authors chose to use the HIPPO theory. Let’s see how it works!
 
 
 ### 2.2 Adressing long range dependencies using HiPPO ###
 
 HiPPO specifies a class of certain matrices $A ∈ R^N×N$ that when incorporated into SSM, allows the state h(t) to memorize the history of the input x(t). The most important matrix in this class is defined by below equation, which we will call the HiPPO matrix: 
-<img width="1221" height="219" alt="image" src="https://github.com/user-attachments/assets/71603f1a-5854-402f-861a-524b829d024b" />
+<img width="610" height="110" alt="image" src="https://github.com/user-attachments/assets/71603f1a-5854-402f-861a-524b829d024b" />
 
 For those not intersted to know idea behind HiPPO and directly use the above A matrix can skip to section 2.3.
 
@@ -156,10 +156,6 @@ We now have a continuous-time SSM with a well-designed A matrix. The next challe
 
 
 
-
-
-
-
 ### 2.3 Discretization ###
 
 Usually we never work with continuous signals, but always with discrete ones (like text), so how can we produce outputs 𝑦(𝑡) for a discrete signal? Moreover, solving the ODE analytically can be difficult and cumbersome. So, we first need to discretize our system!
@@ -169,11 +165,75 @@ Text, audio waveform, or sensor readings aren't a smooth continuous signal — t
 **The Step Size $\Delta$**: Represents the time interval between two consecutive inputs. Conceptually, think of each discrete input $u_k = u(k\Delta)$​ as a *sample* of an underlying continuous signal at time t=kΔ.
 A small Δ: means sampling densely — high resolution. A large Δ means coarser steps — the model "skips" more of the underlying dynamics between tokens.
 
-<img width="720" height="233" alt="image" src="https://github.com/user-attachments/assets/925eff2e-99a6-4a83-a50c-23a15836c40b" />
+<img width="480" height="155" alt="image" src="https://github.com/user-attachments/assets/925eff2e-99a6-4a83-a50c-23a15836c40b" />
 
-The discretization method used is called Bilinear method: it approximates the continuous derivative $h'(t)$ using the trapezoidal rule — averaging the state at the beginning and end of the interval. We will not go into the derivation of it but the final matrices after discretization will be:
+The discretization method used is called Bilinear method. We will not go into the derivation but the final matrices after discretization will be:
 
 <img width="575" height="155" alt="image" src="https://github.com/user-attachments/assets/360857a7-29f7-4946-a103-246b40fbaa13" />
 
-So, SSM equation ius now a sequence-to-sequence map $u_k → y_k$ instead of function-to-function. Moreover the state equation is now a recurrence in $x_k$, allowing the discrete SSM to be computed like an RNN. $x_k ∈ R^N$ can be viewed as a hidden state with transition matrix A.
+just to avoid confusion later, I would like to make it clear that S4 paper used te bilinear discretization method and the Mamba paper used the Zero Order Hold (ZOH) for discretization.
 
+<img width="1039" height="140" alt="image" src="https://github.com/user-attachments/assets/844e2a9c-7811-4440-9682-cb87c45d5624" />
+
+
+Now the result of discretization is that the SSM equation ius now a sequence-to-sequence map $u_k → y_k$ instead of function-to-function. Moreover the state equation is now a recurrence in $x_k$, allowing the discrete SSM to be computed like an RNN. $x_k ∈ R^N$ can be viewed as a hidden state with transition matrix A.
+
+
+### 2.4 Computing the SSM ###
+
+**The Recurrent View (Great for Inference, Terrible for Training)**
+
+At any time step $t$, the hidden state $h_t$ and output $y_t$ are calculated as: 
+
+$$h_t = \mathbf{\bar{A}}h_{t-1} + \mathbf{\bar{B}}x_t$$
+
+$$y_t = \mathbf{C}h_t$$
+
+During inference, this is beautiful. To generate the next token, you only need the current input $x_t$ and the previous compressed state $h_{t-1}$. It requires constant $O(1)$ memory and time. But during training, this is terrible as you have o compute all tokens sequentially. You cannot compute $h_3$ until you finish computing $h_2$. It completely wastes the massive parallel compute power of modern GPUs.
+<img width="500" height="180" alt="image" src="https://github.com/user-attachments/assets/bb87cf98-cb95-4472-8b7a-38f84e2d471b" />
+
+**The Convolutional View (The Parallel Training Trick)**
+
+The recurrent SSM is not practical for training on GPUs due to its sequentiality. Instead, as SSM matrices are LTI, we can directly use convolutions.
+
+Assume our initial state $h_{-1} = 0$. Let's manually calculate the first few outputs:
+
+$h_{-1} = 0$
+
+$$h_0 = \mathbf{\bar{B}}x_0 \implies y_0 = \mathbf{C\bar{B}}x_0$$
+
+$$h_1 = \mathbf{\bar{A}}h_0 + \mathbf{\bar{B}}x_1 = \mathbf{\bar{A}\bar{B}}x_0 + \mathbf{\bar{B}}x_1 \implies y_1 = \mathbf{C\bar{A}\bar{B}}x_0 + \mathbf{C\bar{B}}x_1$$
+
+$$h_2 = \mathbf{\bar{A}}h_1 + \mathbf{\bar{B}}x_2 \implies y_2 = \mathbf{C\bar{A}^2\bar{B}}x_0 + \mathbf{C\bar{A}\bar{B}}x_1 + \mathbf{C\bar{B}}x_2$$
+
+The output $y_k$ at any step is just a linear combination of all past inputs multiplied by a predictable set of weights.
+
+We can group these weights into a single, massive vector called the SSM Kernel ($\mathbf{\bar{K}}$) 
+
+$$\mathbf{\bar{K}} = (\mathbf{C\bar{B}}, \mathbf{C\bar{A}\bar{B}}, \mathbf{C\bar{A}^2\bar{B}}, \dots, \mathbf{C\bar{A}^L\bar{B}})$$
+
+$$y = x * \mathbf{\bar{K}}$$
+
+<img width="650" height="250" alt="image" src="https://github.com/user-attachments/assets/dafe7cfc-29aa-4ae0-b4e6-09b8ed7e16ad" />
+
+Because this kernel is entirely predictable, we completely bypass the sequential step-by-step calculation. We can just take our entire input sequence $\mathbf{x}$ and apply a standard mathematical convolution:
+
+### 2.5 The LTI trap ###
+
+This convolutional trick is why S4 can train lightning-fast using FFTs across the whole sequence at once. However, the above trick only works because the matrices $\mathbf{\bar{A}}$, $\mathbf{\bar{B}}$, and $\mathbf{C}$ are LTI. They do not change based on the input. 
+
+If $\mathbf{\bar{B}}$ changed its value every time it saw a different word, you couldn't pre-compute the kernel $\mathbf{\bar{K}}$. The convolution trick would shatter. This is the exact bottleneck Mamba had to solve: How do we make the model dynamic and content-aware (breaking the LTI rule) without losing the ability to train fast on GPUs?
+
+**Motivating Mamba**: 
+
+The authors of the Mamba paper describe two tasks on which SSM or the S4 do not perform well.
+
+1) Selective Copying:
+   <img width="450" height="170" alt="image" src="https://github.com/user-attachments/assets/8e238e41-9b52-4608-b177-8927cae8861b" />
+2) Induction Heads:
+   <img width="440" height="225" alt="image" src="https://github.com/user-attachments/assets/ab8ac6d3-9676-4c49-9453-0484b4335d0f" />
+
+These tasks reveal the failure mode of LTI models. From the recurrent view, their constant dynamics (e.g. the (A, B) transitions) cannot let them select the correct information from their context, or affect the hidden state passed along the sequence an in input-dependent way. From the convolutional view, it is known that global
+convolutions can solve the vanilla Copying task because it only requires time-awareness, but that they have difficulty with the Selective Copying task because of lack of content-awareness. More concretely, the spacing between inputs-to-outputs is varying and cannot be modeled by static convolution kernels.
+
+These shortcomings led to the development of Mamba....
