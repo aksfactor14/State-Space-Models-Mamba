@@ -1,11 +1,12 @@
 # State Spaces & Mamba
 This is a blog on State Spaces and Mamba
 
-## 1. Introduction: Sequence Modelling ##
+## 1. Introduction: Sequence Modelling and Existing Methods ##
 
 Sequence modelling is a task to map an input sequence x(t), to an output sequence y(t). The input signal could be continuous (like in case of audio) or discrete (like in case of text). Continuous input sequence gets mapped to continuous output sequence and discrete input sequence to a discrete output sequence.
 
-Let's see some of the existing methods for sequence modelling:
+**Why study MAMBA and SSMs**: Before we dive into State Space Models, it helps to understand why they exist. To do that, we need to look at the two dominant approaches to sequence modeling — Transformers and RNNs — and understand where each one breaks down.
+
 
 <table>
   <thead>
@@ -68,13 +69,30 @@ Let's see some of the existing methods for sequence modelling:
   </tbody>
 </table>
 
+**Transformers**: Transformers are the SOTA of modern AI. Their self-attention mechanism is powerful because every token in a sequence can directly attend to every other token — no information gets lost through compression. 
+
+**The problem**: The power of self attention comes with a cost inherited into the architecture itself. At training time, self-attention is O($N^2$) in both time and memory. At inference, KV-caching reduces this to O(N) per token — but memory still grows linearly with context length.
+
+For a sequence of length N, attention computes a similarity score between every pair of tokens. Double the sequence length, and you quadruple the compute. At 10K tokens you're already straining memory. At 100K tokens, you're in trouble.
+
+**Aren't RNNs the Answer?**: RNNs(and LSTMs or GRU) compress the entire past into a hidden state $h_t$​, updated step-by-step:
+
+$h_t = f(h_{t-1},x_t)$
+
+This is elegant. A fixed-size memory that gets updated as the sequence progresses and inference is O(1) per token.
+
+Problems with RNNs:
+1. Vanishing gradients. When training through long sequences, gradients must flow backwards through hundreds of steps. They almost always vanish (or explode) before reaching early tokens. 
+2. No parallelism during training. An RNN is inherently sequential — step t depends on step $t_{-1}$ which depends on step $t_{-2}$. So these can't be computed in parallel
+
+
 Based on the benfits and shortcomings of the above models, we can deduce that an ideal model could: 
 1. Parallelize the training (like the Transformer) and  scale linearly to long sequences (with a computation/memory cost of O(N) like the RNN) 
 2. Can inference each token with a constant computation/memory cost (O(1) like the RNN)
 
 With this in mind, let's explore State Space Models:
 
-## 2 Background: State Spaces ##
+## 2. Background: State Spaces ##
 
 Our goal is the efficient modeling of long sequences. To do this, we are going to build a new neural network layer based on State Space Models. 
 
@@ -124,11 +142,11 @@ The A and B matrices here are derived from first principles from the choice of m
 <img width="600" height="377" alt="image" src="https://github.com/user-attachments/assets/524e236d-1f93-4772-92b2-dd97d4a556d1" />
 
 
-LegT (Translated Legendre) assigns uniform weight to the most recent window [t−θ, t]. This is like a sliding window — it eventually forgets old history as the window slides forward. The window size θ is a hyperparameter which needs to be manually selected, which must match the sequence length. If you mis-specify it, performance drops dramatically.
+1) LegT (Translated Legendre) assigns uniform weight to the most recent window [t−θ, t]. This is like a sliding window — it eventually forgets old history as the window slides forward. The window size θ is a hyperparameter which needs to be manually selected, which must match the sequence length. If you mis-specify it, performance drops dramatically.
 
-LagT (Translated Laguerre) uses an exponentially decaying measure — it remembers all history but gives exponentially less weight to older inputs. It's smoother than LegT but still requires a step-size hyperparameter Δt.
+2) LagT (Translated Laguerre) uses an exponentially decaying measure — it remembers all history but gives exponentially less weight to older inputs. It's smoother than LegT but still requires a step-size hyperparameter Δt.
 
-LegS (Scaled Legendre) is the key innovation. It assigns uniform weight over the entire history [0, t], and the window grows with time. This gives it two remarkable properties: it requires no timescale hyperparameter, and it is provably invariant to changes in input timescale (if you speed up or slow down the input signal, the coefficients simply shift accordingly). This is the measure used in the SSMs that power models like Mamba.
+3) LegS (Scaled Legendre) is the key innovation. It assigns uniform weight over the entire history [0, t], and the window grows with time. This gives it two remarkable properties: it requires no timescale hyperparameter, and it is provably invariant to changes in input timescale (if you speed up or slow down the input signal, the coefficients simply shift accordingly). This is the measure used in the SSMs that power models like Mamba.
 
 The resulting LegS matrices (which become the A matrix in our SSM) are:
 
@@ -150,8 +168,9 @@ $$
 
 Notice that this discrete recurrence does not depend on any step size Δt — the k in the denominator comes entirely from the growing window, making the system intrinsically robust to sampling rate changes.
 
-So to summarize: The A matrix is the HiPPO-LegS A matrix, derived from first principles as the optimal online polynomial compression of the input signal's history. This gives the hidden state h(t) a principled and theoretically grounded memory mechanism.
-We now have a continuous-time SSM with a well-designed A matrix. The next challenge is making this practically usable on real discrete data like text or audio. That requires converting these continuous equations into a discrete sequence-to-sequence map — which is exactly what discretization in Section 2.3 achieves.
+So to summarize: The A matrix is the HiPPO-LegS A matrix, derived from first principles as the optimal online polynomial compression of the input signal's history. This gives the hidden state h(t) a principled and theoretically grounded memory mechanism. We now have a continuous-time SSM with a well-designed A matrix. 
+
+The next challenge is making this practically usable on real discrete data like text or audio. That requires converting these continuous equations into a discrete sequence-to-sequence map — which is exactly what discretization in Section 2.3 achieves.
 
 
 
@@ -190,7 +209,8 @@ $$h_t = \mathbf{\bar{A}}h_{t-1} + \mathbf{\bar{B}}x_t$$
 $$y_t = \mathbf{C}h_t$$
 
 During inference, this is beautiful. To generate the next token, you only need the current input $x_t$ and the previous compressed state $h_{t-1}$. It requires constant $O(1)$ memory and time. But during training, this is terrible as you have o compute all tokens sequentially. You cannot compute $h_3$ until you finish computing $h_2$. It completely wastes the massive parallel compute power of modern GPUs.
-<img width="500" height="180" alt="image" src="https://github.com/user-attachments/assets/bb87cf98-cb95-4472-8b7a-38f84e2d471b" />
+<img width="656" height="295" alt="image" src="https://github.com/user-attachments/assets/dcfccd72-df64-470d-a68e-9d6b425f041c" />
+
 
 **The Convolutional View (The Parallel Training Trick)**
 
@@ -237,3 +257,22 @@ These tasks reveal the failure mode of LTI models. From the recurrent view, thei
 convolutions can solve the vanilla Copying task because it only requires time-awareness, but that they have difficulty with the Selective Copying task because of lack of content-awareness. More concretely, the spacing between inputs-to-outputs is varying and cannot be modeled by static convolution kernels.
 
 These shortcomings led to the development of Mamba....
+
++ Before proceeding: If you want to deep dive into the technical details on how to calculate the HiPPO matrix and build a S4 model yourself, you may find this helpful https://srush.github.io/annotated-s4/
+
+
+
+
+
+## 3. Mamba1: Linear-Time Sequence Modeling with Selective State Spaces ##
+
+Some modifications that can be made to S4 to improve its content based reasoning: 
+1) Simply letting the SSM parameters be functions of the input addresses their weakness with discrete modalities, allowing the model to selectively propagate or forget information along the sequence length dimension depending on the current token.
+2) Even though this change prevents the use of efficient convolutions, the authors of the mamba paper propose a hardware-aware parallel algorithm in recurrent mode.
+   Then we can integrate these selective SSMs into a simplified end-to-end neural network architecture without attention or even MLP blocks (Mamba).
+
+
+
+
+
+
