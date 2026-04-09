@@ -179,7 +179,7 @@ The next challenge is making this practically usable on real discrete data like 
 
 Usually we never work with continuous signals, but always with discrete ones (like text), so how can we produce outputs 𝑦(𝑡) for a discrete signal? Moreover, solving the ODE analytically can be difficult and cumbersome. So, we first need to discretize our system!
 
-Text, audio waveform, or sensor readings aren't a smooth continuous signal — they're a discrete sequence of tokens or samples: $u_0, u_1, u_2, ...$ arriving at fixed intervals. To run an SSM on real data, we need to *discretize* it — convert those continuous matrices (A,B,C) into discrete counterparts $(\bar{A}, \bar{B}, \bar{C})$  that can step through a sequence one token at a time.
+Text, audio waveform, or sensor readings aren't a smooth continuous signal — they're a discrete sequence of tokens or samples: $u_0, u_1, u_2, ...$ arriving at fixed intervals. To run an SSM on real data, we need to *discretize* it — convert those continuous matrices (A,B,C) into discrete counterparts $(\overline{A}, \overline{B}, \overline{C})$  that can step through a sequence one token at a time.
 
 **The Step Size $\Delta$**: Represents the time interval between two consecutive inputs. Conceptually, think of each discrete input $u_k = u(k\Delta)$​ as a *sample* of an underlying continuous signal at time t=kΔ.
 A small Δ: means sampling densely — high resolution. A large Δ means coarser steps — the model "skips" more of the underlying dynamics between tokens.
@@ -204,7 +204,7 @@ Now the result of discretization is that the SSM equation ius now a sequence-to-
 
 At any time step $t$, the hidden state $h_t$ and output $y_t$ are calculated as: 
 
-$$h_t = \mathbf{\bar{A}}h_{t-1} + \mathbf{\bar{B}}x_t$$
+$$h_t = \mathbf{\overline{A}}h_{t-1} + \mathbf{\overline{B}}x_t$$
 
 $$y_t = \mathbf{C}h_t$$
 
@@ -220,19 +220,19 @@ Assume our initial state $h_{-1} = 0$. Let's manually calculate the first few ou
 
 $h_{-1} = 0$
 
-$$h_0 = \mathbf{\bar{B}}x_0 \implies y_0 = \mathbf{C\bar{B}}x_0$$
+$$h_0 = \mathbf{\overline{B}}x_0 \implies y_0 = \mathbf{C\overline{B}}x_0$$
 
-$$h_1 = \mathbf{\bar{A}}h_0 + \mathbf{\bar{B}}x_1 = \mathbf{\bar{A}\bar{B}}x_0 + \mathbf{\bar{B}}x_1 \implies y_1 = \mathbf{C\bar{A}\bar{B}}x_0 + \mathbf{C\bar{B}}x_1$$
+$$h_1 = \mathbf{\overline{A}}h_0 + \mathbf{\overline{B}}x_1 = \mathbf{\overline{A}\overline{B}}x_0 + \mathbf{\overline{B}}x_1 \implies y_1 = \mathbf{C\overline{A}\overline{B}}x_0 + \mathbf{C\overline{B}}x_1$$
 
-$$h_2 = \mathbf{\bar{A}}h_1 + \mathbf{\bar{B}}x_2 \implies y_2 = \mathbf{C\bar{A}^2\bar{B}}x_0 + \mathbf{C\bar{A}\bar{B}}x_1 + \mathbf{C\bar{B}}x_2$$
+$$h_2 = \mathbf{\overline{A}}h_1 + \mathbf{\overline{B}}x_2 \implies y_2 = \mathbf{C\overline{A}^2\overline{B}}x_0 + \mathbf{C\overline{A}\overline{B}}x_1 + \mathbf{C\overline{B}}x_2$$
 
 The output $y_k$ at any step is just a linear combination of all past inputs multiplied by a predictable set of weights.
 
-We can group these weights into a single, massive vector called the SSM Kernel ($\mathbf{\bar{K}}$) 
+We can group these weights into a single, massive vector called the SSM Kernel ($\mathbf{\overline{K}}$) 
 
-$$\mathbf{\bar{K}} = (\mathbf{C\bar{B}}, \mathbf{C\bar{A}\bar{B}}, \mathbf{C\bar{A}^2\bar{B}}, \dots, \mathbf{C\bar{A}^L\bar{B}})$$
+$$\mathbf{\overline{K}} = (\mathbf{C\overline{B}}, \mathbf{C\overline{A}\overline{B}}, \mathbf{C\overline{A}^2\overline{B}}, \dots, \mathbf{C\overline{A}^L\overline{B}})$$
 
-$$y = x * \mathbf{\bar{K}}$$
+$$y = x * \mathbf{\overline{K}}$$
 
 <img width="670" height="333" alt="image" src="https://github.com/user-attachments/assets/08aafb57-856b-4bbd-800f-bcd7d74c84d1" />
 
@@ -240,9 +240,9 @@ Because this kernel is entirely predictable, we completely bypass the sequential
 
 ### 2.5 The LTI trap ###
 
-This convolutional trick is why S4 can train lightning-fast using FFTs across the whole sequence at once. However, the above trick only works because the matrices $\mathbf{\bar{A}}$, $\mathbf{\bar{B}}$, and $\mathbf{C}$ are LTI. They do not change based on the input. 
+This convolutional trick is why S4 can train lightning-fast using FFTs across the whole sequence at once. However, the above trick only works because the matrices $\mathbf{\overline{A}}$, $\mathbf{\overline{B}}$, and $\mathbf{C}$ are LTI. They do not change based on the input. 
 
-If $\mathbf{\bar{B}}$ changed its value every time it saw a different word, you couldn't pre-compute the kernel $\mathbf{\bar{K}}$. The convolution trick would shatter. This is the exact bottleneck Mamba had to solve: How do we make the model dynamic and content-aware (breaking the LTI rule) without losing the ability to train fast on GPUs?
+If $\mathbf{\overline{B}}$ changed its value every time it saw a different word, you couldn't pre-compute the kernel $\mathbf{\overline{K}}$. The convolution trick would shatter. This is the exact bottleneck Mamba had to solve: How do we make the model dynamic and content-aware (breaking the LTI rule) without losing the ability to train fast on GPUs?
 
 **Motivating Mamba**: 
 
@@ -266,26 +266,72 @@ These shortcomings led to the development of Mamba....
 
 ## 3. Mamba1: Linear-Time Sequence Modeling with Selective State Spaces ##
 
-Some modifications that can be made to S4 to improve its content based reasoning: 
-1) Simply letting the SSM parameters be functions of the input addresses their weakness with discrete modalities, allowing the model to selectively propagate or forget information along the sequence length dimension depending on the current token.
-2) Even though this change prevents the use of efficient convolutions, the authors of the mamba paper propose a hardware-aware parallel algorithm in recurrent mode.
-   Then we can integrate these selective SSMs into a simplified end-to-end neural network architecture without attention or even MLP blocks (Mamba).
+We ended up the section 2 with an insight that S4 models become content blind due to the LTI matrices. So, how do we improve or build upon our S4 model??
 
+One obvious solution is to let the SSM parameters be functions of the input. This addresses their weakness with discrete modalities, allowing the model to selectively propagate or forget information along the sequence length dimension depending on the current token.
+But the moment we do that, the kernel $\overline{K}$ becomes dependant on input and hence it can no longer be pre-computed. So, the convolution trick breaks.
 
+Mamba's contributions are exactly to solve these problems: Content Awareness & Fast training. 
 
+The authors of the mamba paper propose two methods which we will cover in this section: 
 
+1) A selective scan algorithm, which allows the model to filter relevant information.
+2) A hardware-aware algorithm that allows for efficient storage of (intermediate) results through parallel scan, kernel fusion, and recomputation.
 
+Together they create the selective SSM or S6 models which can be used, like self-attention, to create Mamba blocks.
 
+### 3.1 The Selection Mechanism ###
 
+In S4, the parameters are fixed constants with shapes:   $$B \in \mathbb{R}^{N \times 1}, \quad C \in \mathbb{R}^{1 \times N}, \quad \Delta \in \mathbb{R}^D$$
 
+They don't change based on what token they see. The word "the" and the word "Paris" use the exact same B matrix.
 
+Mamba's intuitive fix is to make B,C and $\Delta$ function of current input $x_t$
 
+$$B_t = s_B(x_t) = \text{Linear}_N(x_t), \quad B_t \in \mathbb{R}^{B \times L \times N}$$
 
+$$C_t = s_C(x_t) = \text{Linear}_N(x_t), \quad C_t \in \mathbb{R}^{B \times L \times N}$$
 
+$$\Delta_t = \tau_{\Delta}(\text{Parameter} + s_{\Delta}(x_t)), \quad \Delta_t \in \mathbb{R}^{B \times L \times D}$$
 
+where
 
+$$
+s_{\Delta}(x_t) = \text{Broadcast}_D(\text{Linear}_1(x_t)) \quad \text{and} \quad \tau_{\Delta} = \text{softplus}
+$$
 
+1) **The projections for $B_t$ and $C_t$:** 
 
+  $$B_t = s_B(x_t) = \text{Linear}_N(x_t), \quad B_t \in \mathbb{R}^{B \times L \times N}$$
+
+  $$C_t = s_C(x_t) = \text{Linear}_N(x_t), \quad C_t \in \mathbb{R}^{B \times L \times N}$$
+  
+  + What it does: The model passes the current input $x_t$ through a linear layer to generate the matrices $B$ and $C$.
+  + The Selection: Because $B_t$ and $C_t$ now depend on $x_t$, the model can "select" what information to let into the hidden state ($B_t$) and what information to extract from it ($C_t$).
+  + Dimensions: $B$ is the batch size, $L$ is sequence length, and $N$ is the state dimension.
+
+2)  **The Step Size $\Delta_t$ (Discretization)**:
+   As we have already covered in the section 2.3 Discretization, $\Delta$ represents the "timescale" or step size. It determines how much the model focuses on the current input versus the past hidden state.
+
+  $$
+  s_{\Delta}(x_t) = \text{Broadcast}_D(\text{Linear}_1(x_t)) \quad \text{and} \quad \tau_{\Delta} = \text{softplus}
+  $$
+
+  + $s_{\Delta}(x_t)$: An input-dependent adjustment.
+  + $\tau_{\Delta}$ (Softplus): A function that ensures $\Delta_t$ is always positive.
+
+3) **The Broadcast mechanism:**
+
+  $$s_{\Delta}(x_t) = \text{Broadcast}_D(\text{Linear}_1(x_t))$$
+
+  The Broadcast Mechanism is what keeps Mamba fast.
+  + The Problem: In a standard high-dimensional system, the model would have to calculate an attention score for every single feature of the input. If the data has 1,024 features, that’s over     a million calculations ($D \times D$) just to decide how to update the memory.
+    
+  + Solution of Mamba:
+    + Condense: It looks at the input $x_t$ and compresses it into a single scalar value.
+    + Broadcast: It takes that one number and copies (broadcasts) it across all $D$ dimensions.
+
+  + This keeps the parameter count low while still allowing the step size to be data-dependent.
 
 
 
