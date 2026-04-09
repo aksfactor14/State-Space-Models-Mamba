@@ -276,3 +276,49 @@ Some modifications that can be made to S4 to improve its content based reasoning
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+## 6. Benchmarking Mamba-1, Mamba-2 and Transformers on HellaSwag ##
+
+To ground the theoretical discussion above in practice, I ran zero-shot evaluations of Mamba-1, Mamba-2, and two transformer baselines on the HellaSwag commonsense reasoning benchmark using the lm-evaluation-harness library — the same setup used in the original Mamba paper.
+
+I could not benchmark Mamba-3 becuase its pre-trained weights have not been released yet.
+
+### 6.1 Setup ###
+
+All models were evaluated zero-shot (n-shot = 0), meaning no examples were provided before testing. The primary metric reported is acc_norm (length-normalized accuracy) which corrects for the model's natural bias toward shorter answers and is the standard metric for HellaSwag comparisons.
+
+Models evaluated:
+
++ Mamba-1 350M and 1.4B — the selective SSM from Section 3
++ Mamba-2 350M and 1.3B — the SSD-based architecture from Section 4
++ Pythia 1.4B — a transformer trained on the same dataset as Mamba (The Pile), making it a clean controlled comparison
++ TinyLlama 1.1B — a modern transformer using the LLaMA architecture with RoPE, SwiGLU, and grouped query attention
+
+### 6.2 Results ###
+
+<img width="709" height="325" alt="image" src="https://github.com/user-attachments/assets/49b7cea7-4d69-4ce0-a097-19aa854c4310" />
+
+
+### 6.3 Observations ###
+
+1) Mamba-1 matches transformers at the same parameter count. Mamba-1 1.4B and TinyLlama 1.1B score 0.5913 and 0.5920 respectively, which is almost identical. This is significant because TinyLlama uses years of accumulated transformer engineering (RoPE, SwiGLU, grouped query attention) — while Mamba-1 uses no attention mechanism at all.
+2) Mamba-1 outperforms Pythia at the same size. Both are 1.4B models trained on The Pile dataset, making this the cleanest comparison. Mamba-1 scores 0.5913 against Pythia's 0.5197. Hence, Mamba-1 scores somewhat better than its corresponding transformer rival Pythia.
+3) Mamba-2 350M underperforms Mamba-1 350M. This is counterintuitive at first glance that the newer architecture is doing worse. But recall that Mamba-2 was not designed to improve benchmark accuracy at small scales. Its SSD algorithm and larger state dimensions are built to improve hardware efficiency and scale better. So, see that at 1.3B, Mamba-2 achieves the highest score in the table (0.5994), suggesting its architecture benefits more from scale.
+4) The gap between acc and acc_norm is large across all models. For example, Mamba-1 1.4B goes from 0.4505 to 0.5913 after normalization. This tells us that without length normalization, all models are penalizing longer correct answers unfairly — reinforcing that acc_norm is the right metric to use here
+
+**What These Numbers Mean**: A score of ~0.60 on HellaSwag is in the expected range for 1-1.4B parameter models. For context, random chance is 0.25 (chosing our of four choices), human performance is around 0.95, and models like LLaMA-3 8B reach approximately 0.82. So these models have clearly learned meaningful language representations, but there is still a large gap to human-level commonsense reasoning that generally closes with scale.
+  
+The more interesting finding here is the architectural parity. An SSM with linear-time complexity, no attention, and O(1) inference cost matches a transformer with quadratic attention on a standard reasoning benchmark. That is the core promise of the Mamba line of work — and at least at this scale, it holds up.
+
