@@ -291,7 +291,7 @@ Some modifications that can be made to S4 to improve its content based reasoning
 
 ## 6. Benchmarking Mamba-1, Mamba-2 and Transformers on HellaSwag ##
 
-To ground the theoretical discussion above in practice, I ran zero-shot evaluations of Mamba-1, Mamba-2, and two transformer baselines on the HellaSwag commonsense reasoning benchmark using the lm-evaluation-harness library — the same setup used in the original Mamba paper.
+To make things practical, I ran zero-shot evaluations on HellaSwag commonsense reasoning benchmark using the lm-evaluation-harness, same like in the Mamba paper. I checked Mamba-1, Mamba-2, and also two transformer baselines on the HellaSwag dataset.
 
 I could not benchmark Mamba-3 becuase its pre-trained weights have not been released yet.
 
@@ -319,6 +319,22 @@ Models evaluated:
 4) The gap between acc and acc_norm is large across all models. Example: Mamba-1 1.4B goes from 0.4505 to 0.5913 after normalization. This tells that without length normalization, models penalize longer answers unfairly, hence acc_norm is the right metric to use here.
 
 **What These Numbers Mean**: A score of ~0.60 on HellaSwag is in the expected range for 1-1.4B parameter models. For context, random chance is 0.25 (chosing our of four choices), human performance is around 0.95, and models like LLaMA-3 8B reach approximately 0.82. So these models have clearly learned meaningful language representations, but there is still a large gap to human-level commonsense reasoning that generally closes with scale.
+
+
+#### Clarification about how accuracy is calculated ####
+
+When lm_eval runs HellaSwag, it scores each of the 4 candidate completions by computing the log-probability of that completion given the context. The candidate with the highest log-probability is picked as the answer. Formula for log-probability
+
+$$\log P(\text{completion}) = \sum_{i=1}^{n} \log P(\text{token}_i)$$
+
+Each individual token probability is less than 1, so its log is negative. This means the more tokens a completion has, the more negative its total score becomes becuase of adding more negative numbers.
+
+acc_norm divides the total log-probability by the number of tokens:
+
+$$\text{acc-norm} = \frac{\log P(\text{completion})}{n}$$
+
+This gives a per-token average, putting all candidates on equal level regardless of length. Hence it is used as the standard metric for HellaSwag.
+
   
 The more interesting finding here is the architectural parity. An SSM with linear-time complexity, no attention, and O(1) inference cost matches a transformer with quadratic attention on a standard reasoning benchmark. That is the core promise of the Mamba line of work — and at least at this scale, it holds up.
 
