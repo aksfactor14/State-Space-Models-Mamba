@@ -234,7 +234,7 @@ $$\mathbf{\bar{K}} = (\mathbf{C\bar{B}}, \mathbf{C\bar{A}\bar{B}}, \mathbf{C\bar
 
 $$y = x * \mathbf{\bar{K}}$$
 
-<img width="650" height="250" alt="image" src="https://github.com/user-attachments/assets/dafe7cfc-29aa-4ae0-b4e6-09b8ed7e16ad" />
+<img width="670" height="333" alt="image" src="https://github.com/user-attachments/assets/08aafb57-856b-4bbd-800f-bcd7d74c84d1" />
 
 Because this kernel is entirely predictable, we completely bypass the sequential step-by-step calculation. We can just take our entire input sequence $\mathbf{x}$ and apply a standard mathematical convolution:
 
