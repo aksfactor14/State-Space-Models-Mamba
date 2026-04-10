@@ -300,6 +300,13 @@ $$
 s_{\Delta}(x_t) = \text{Broadcast}_D(\text{Linear}_1(x_t)) \quad \text{and} \quad \tau_{\Delta} = \text{softplus}
 $$
 
+Notice the new dimension L(sequence length) in these shapes. In S4, B and C had no L dimension — they were the same for every position. Now each token gets its own $B_t$ and $C_t$​.
+
+This is the selection mechanism. The model is no longer time-invariant. It is now time-varying.
+
+A stays fixed by the way. But since $\mathbf{\overline{A}}$ = exp($\Delta_t$A) and $\Delta_t$ is input-dependant so $\mathbf{\overline{A}}$ becomes input dependant too.
+
+
 1) **The projections for $B_t$ and $C_t$:** 
 
   $$B_t = s_B(x_t) = \text{Linear}_N(x_t), \quad B_t \in \mathbb{R}^{B \times L \times N}$$
@@ -311,7 +318,10 @@ $$
   + Dimensions: $B$ is the batch size, $L$ is sequence length, and $N$ is the state dimension.
 
 2)  **The Step Size $\Delta_t$ (Discretization)**:
-   As we have already covered in the section 2.3 Discretization, $\Delta$ represents the "timescale" or step size. It determines how much the model focuses on the current input versus the past hidden state.
+   In Section 2.3, Δ was a fixed step size: a sampling resolution parameter. Now it's dynamic. It changes per token based on the input and controls how long the continuous system "sits" at the    current input.
+
+  + **Large Δt​**: The state resets strongly toward the current token. Its like: *"This token matters. Focus on it."*
+  + **Small Δt​**: The previous state flows through almost unchanged. Its like: *"This token is noise. Ignore it."*
 
   $$
   s_{\Delta}(x_t) = \text{Broadcast}_D(\text{Linear}_1(x_t)) \quad \text{and} \quad \tau_{\Delta} = \text{softplus}
@@ -319,6 +329,8 @@ $$
 
   + $s_{\Delta}(x_t)$: An input-dependent adjustment.
   + $\tau_{\Delta}$ (Softplus): A function that ensures $\Delta_t$ is always positive.
+
+This is actually a generalization of LSTM/GRU gating as pointed out in the paper.
 
 3) **The Broadcast mechanism:**
 
@@ -331,7 +343,47 @@ $$
     + Condense: It looks at the input $x_t$ and compresses it into a single scalar value.
     + Broadcast: It takes that one number and copies (broadcasts) it across all $D$ dimensions.
 
-  + This keeps the parameter count low while still allowing the step size to be data-dependent.
+  + Idea:  In particular, if a given input $𝑥_𝑡$ should be completely ignored, all 𝐷 channels should ignore it, and so we project the input down to 1 dimension before repeating/broadcasting         with Δ.
+  + This also keeps the parameter count low while still allowing the step size to be data-dependent.
+
+
+### 3.2 Why this breaks the ocnvolution trick? ###
+
+We have already discussed the LTI trap in section 2.5. In S4 the kernel could be pre-computed. 
+
+But now in Mamba, $B_t$​ and Δt​ vary per token. So $\mathbf{\overline{A}_t}$ and $\mathbf{\overline{B}_t}$​ are different at every timestep. The kernel" at position t  would need to look like:
+
+This will require L different kernels of length L each. That's O($L^2$) memory just to store them. The whole point of SSMs was to avoid this. Moreover, we clearly cannot use the recurrent form as it sequential. 
+
+Mamba solves this with the parallel scan.
+
+### 3.3 The parallel scan algorithm ###
+
+First of all understand that as long as the operations we are doing are associative, the scan can be parallelized. The associative property states that , so the order in which we do the operations does not matter.
+
+$$A * B * C = (A * B) * C = A * (B * C)$$
+
+The key insight: the recurrence $$h_t = \mathbf{\overline{A}}h_{t-1} + \mathbf{\overline{B}}x_t$$ is an **associative** operation. Even though $\mathbf{\overline{A}_t}$​ changes at every step, you can still define an associative binary operator on pairs ($\mathbf{\overline{A}_t}, h$) and apply it in a tree-structured parallel fashion.
+
+Think of it like a prefix sum problem solved in parallel
+
+<img width="760" height="331" alt="image" src="https://github.com/user-attachments/assets/68180682-6c43-4f60-9795-e762deaae48b" />
+
+Naively this is sequential. But you can compute partial sums in parallel, then combine them in O(log⁡L) parallel steps instead of O(L) sequential steps.
+
+The same tree structure works for the SSM recurrence. Instead of summing numbers, you're composing state transitions. The associativity of matrix multiplication is what makes it work.
+
+Parallel scan is actually a quite classic technique, and you can refer to Wikipedia for more details: https://en.wikipedia.org/wiki/Prefix_sum#Algorithm_1:_Shorter_span,_more_parallel
+
+The result: even though $\mathbf{\overline{A}_t}$ and $\mathbf{\overline{B}_t}$​ are different at every timestep, you can still compute all $h_0,h_1,…,h_Lh$​ in parallel during training. The sequential dependency remains, but the sequential computation does not. Training complexity drops from O(L) sequential steps to O(log⁡L) parallel depth.
+
+
+### 3.4 Making It Fast on Hardware: The Three Tricks ###
+
+
+
+
+
 
 
 
