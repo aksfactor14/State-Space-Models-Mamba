@@ -26,9 +26,9 @@ Sequence modelling is a task to map an input sequence x(t), to an output sequenc
     </tr>
     <tr>
       <td>Parallelizable (Training)</td>
-      <td>❌ No — O(N)</td>
-      <td>✅ Yes</td>
-      <td>✅ Yes — O(N²)</td>
+      <td>No — O(N)</td>
+      <td>Yes</td>
+      <td>Yes — O(N²)</td>
     </tr>
     <tr>
       <td>Inference Complexity</td>
