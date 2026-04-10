@@ -92,6 +92,8 @@ Based on the benfits and shortcomings of the above models, we can deduce that an
 
 With this in mind, let's explore State Space Models:
 
+---
+
 ## 2. Background: State Spaces ##
 
 Our goal is the efficient modeling of long sequences. To do this, we are going to build a new neural network layer based on State Space Models. 
@@ -171,7 +173,6 @@ Notice that this discrete recurrence does not depend on any step size Δt — th
 So to summarize: The A matrix is the HiPPO-LegS A matrix, derived from first principles as the optimal online polynomial compression of the input signal's history. This gives the hidden state h(t) a principled and theoretically grounded memory mechanism. We now have a continuous-time SSM with a well-designed A matrix. 
 
 The next challenge is making this practically usable on real discrete data like text or audio. That requires converting these continuous equations into a discrete sequence-to-sequence map — which is exactly what discretization in Section 2.3 achieves.
-
 
 
 
@@ -260,8 +261,7 @@ These shortcomings led to the development of Mamba....
 
 + Before proceeding: If you want to deep dive into the technical details on how to calculate the HiPPO matrix and build a S4 model yourself, you may find this helpful https://srush.github.io/annotated-s4/
 
-
-
+---
 
 
 ## 3. Mamba1: Linear-Time Sequence Modeling with Selective State Spaces ##
@@ -375,17 +375,106 @@ The same tree structure works for the SSM recurrence. Instead of summing numbers
 
 Parallel scan is actually a quite classic technique, and you can refer to Wikipedia for more details: https://en.wikipedia.org/wiki/Prefix_sum#Algorithm_1:_Shorter_span,_more_parallel
 
+<img width="663" height="460" alt="image" src="https://github.com/user-attachments/assets/b6b1c568-1ac8-4afa-8c2e-d50080a56d85" />
+
+
 The result: even though $\mathbf{\overline{A}_t}$ and $\mathbf{\overline{B}_t}$​ are different at every timestep, you can still compute all $h_0,h_1,…,h_Lh$​ in parallel during training. The sequential dependency remains, but the sequential computation does not. Training complexity drops from O(L) sequential steps to O(log⁡L) parallel depth.
 
 
 ### 3.4 Making It Fast on Hardware: The Three Tricks ###
 
+Mamba's selective scan is mathematically elegant. But a naive implementation of S6 would actually be slower than a Transformer. The hardware optimization is what makes the whole thing practical.
+
+**The Real Bottleneck: Memory, Not Compute**
+
+A GPU has two kinds of memory:
+
+1) HBM (High Bandwidth Memory): Large (40–80 GB memory). Slow to access. This is what is usually called "GPU memory."
+2) SRAM (on-chip cache): Tiny (about 20 MB). Extremely fast. This is where the actual compute units live.
+
+Every time you want to run a computation, you first load data from HBM into SRAM, run the math, then write results back to HBM. The math(matrix operations) itself is fast. The loading and writing is slow. The selective scan is IO-bound because it spends most of its time moving data between HBM and SRAM. The bottleneck is how many times we read and write the large intermediate state tensor. This is the exact same problem FlashAttention solved for Transformers. Mamba applies the same philosophy to SSMs.
+
+**The Problem with a Naive Implementation**
+
+Let's see what happens if you implement the selective scan the obvious way in PyTorch. The hidden state at each step has shape (B,L,D,N). Here N s the state dimesnion. For an actual Mamba model(say 1.4B parameters) this tensor is enormous.
+
+A naive implementation would:
+
+1) Load Δ,A,B, and C from HBM into SRAM.
+2) Run discretization: write $\overline{A}$, $\overline{B}$  of shape (B,L,D,N) back to HBM.
+3) Load $\overline{A}$ and $\overline{B}$ back from HBM into SRAM.
+4) Run the scan: write all intermediate states (B,L,D,N) back to HBM.
+5) Load intermediate states from HBM
+6) Multiply with C: write output back to HBM.
+
+<img width="663" height="138" alt="image" src="https://github.com/user-attachments/assets/1a38c67d-614a-4d37-b54c-b2a45c70402a" />
+
+This crosses the slow HBM-SRAM boundary multiple times, and materializes the full (B,L,D,N) state tensor in HBM each time. That tensor is N times larger than the input/output tensors. This is where the slowness comes from.
+
+This architecture is often referred to as a selective SSM or S6 model since it is an S4 model computed with the selective scan algorithm.
+
+Mamba eliminates this with three techniques:
+
+1) **Kernel Fusion**
+   The idea: instead of running discretization, scan, and multiplication with C as three separate GPU operations (each requiring HBM reads and writes), fuse them into a single CUDA kernel.
+
+  Normally, each GPU operation is a separate "kernel" — a small program that runs on the GPU. Each kernel starts by loading its inputs from HBM and ends by writing its outputs back to HBM.       The next operation immediately needs those outputs so it goes to HBM first, and then loads them again. 
+  
+  Kernel fusion merges these separate operations into one. The fused kernel:
+
+  1) Loads Δ, A, B, C once from HBM into SRAM.
+  2) Computes discretization entirely in SRAM: gets $\overline{A}_t$ and $\overline{B}_t$
+  3) Runs the scan step entirely in SRAM: gets $h_t$
+  4) Multiplies by $C_t$​ entirely in SRAM: gets $y_t$
+  5) Writes only the final output y of shape (B,L,D) back to HBM
+
+  The large intermediate state tensor of shape (B,L,D,N) never touches HBM. It lives and dies in fast SRAM. The number of HBM reads/writes drops by a factor of N.
+
+<img width="440" height="135" alt="image" src="https://github.com/user-attachments/assets/36cfd095-8f2f-4145-98be-f464640ebb0c" />
+
+
+
+2) **Trick 2: Recomputation**
+   
+  Fusion solves the forward pass. But training requires a backward pass too which needs the intermediate states $h_t$​ to compute gradients.
+
+  Normally, we would save all intermediate states during the forward pass so the backward pass can use them. But those states have shape (B,L,D,N) — saving them would require materializing       that large tensor in HBM, which is exactly what we left in the above section.
+
+  Mamba's solution: don't save them. Recompute them during the backward pass. When the backward pass needs $h_t$, it re-reads the original inputs Δ, A, B, C from HBM into SRAM and reruns the scan to recompute $h_t$​ on the fly.
+
+  This sounds wasteful — doing extra compute. But remember: In our case GPU is not compute bound, it is memory movement (IO) bound. Recomputing $h_t$​ costs a few extra multiplications in fast   SRAM. Reading a saved (B,L,D,N) tensor from slow HBM costs far more time.
+
+  It's the same trade-off FlashAttention uses. Recompute the attention matrix during the backward pass rather than saving it. A slightly higher FLOP count in exchange for dramatically less HBM   traffic.
+  
+
+3) **Trick 3: Chunking for Very Long Sequences**
+  There's one remaining edge case. SRAM is tiny (about 20 MB). For very long sequences, even the inputs Δ, A, B, C may not fit in SRAM all at once.
+
+  The solution is straightforward intuitive: chunk the sequence. Split the length L sequence into blocks that fit in SRAM. Run the fused kernel on each block. Pass the final hidden state from    one block as the initial state for the next block.
+
+  This lets Mamba scale to arbitrarily long sequences just by adjusting the chunk size to fit SRAM.
+
+**The Combined Effect**: Together, these tricks bring the IO cost of the selective scan from O(BLDN) down to O(BLD+DN).
+
+In practice, the fused selective scan is 20–40× faster than standard PyTorch scan implementation. This is why Mamba achieves 4–5× higher inference throughput than same-size Transformers. At inference, there's no KV-cache at all. The entire sequence history is compressed into a fixed-size state $h_t ∈ R^(D×N)$ regardless of how long the sequence gets. Memory doesn't grow. 
+
+
+### 3.5 The Mamba Architecture ###
+
+<img width="416" height="512" alt="image" src="https://github.com/user-attachments/assets/9dbfee9f-fb5b-41c5-adbc-1c361814d015" />
+
+So, this Mamba architecture's image summarizes the whole flow we have discussed till now. This was Mamba 1.....
 
 
 
 
 
 
+
+
+
+
+---
 
 ## 6. Benchmarking Mamba-1, Mamba-2 and Transformers on HellaSwag ##
 
