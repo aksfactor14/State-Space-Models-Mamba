@@ -304,7 +304,7 @@ Notice the new dimension L(sequence length) in these shapes. In S4, B and C had 
 
 This is the selection mechanism. The model is no longer time-invariant. It is now time-varying.
 
-A stays fixed by the way. But since $\mathbf{\overline{A}}$ = exp($\Delta_t$A) and $\Delta_t$ is input-dependant so $\mathbf{\overline{A}}$ becomes input dependant too.
+A stays fixed by the way. But since $\mathbf{\overline{A}}$ = $exp($\Delta_t$A)$ and $\Delta_t$ is input-dependant so $\mathbf{\overline{A}}$ becomes input dependant too.
 
 
 1) **The projections for $B_t$ and $C_t$:** 
