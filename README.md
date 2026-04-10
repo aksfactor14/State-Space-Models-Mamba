@@ -367,7 +367,7 @@ The key insight: the recurrence $$h_t = \mathbf{\overline{A}}h_{t-1} + \mathbf{\
 
 Think of it like a prefix sum problem solved in parallel
 
-<img width="760" height="331" alt="image" src="https://github.com/user-attachments/assets/68180682-6c43-4f60-9795-e762deaae48b" />
+<img width="507" height="221" alt="image" src="https://github.com/user-attachments/assets/68180682-6c43-4f60-9795-e762deaae48b" />
 
 Naively this is sequential. But you can compute partial sums in parallel, then combine them in O(log⁡L) parallel steps instead of O(L) sequential steps.
 
@@ -375,7 +375,7 @@ The same tree structure works for the SSM recurrence. Instead of summing numbers
 
 Parallel scan is actually a quite classic technique, and you can refer to Wikipedia for more details: https://en.wikipedia.org/wiki/Prefix_sum#Algorithm_1:_Shorter_span,_more_parallel
 
-<img width="663" height="460" alt="image" src="https://github.com/user-attachments/assets/b6b1c568-1ac8-4afa-8c2e-d50080a56d85" />
+<img width="442" height="307" alt="image" src="https://github.com/user-attachments/assets/b6b1c568-1ac8-4afa-8c2e-d50080a56d85" />
 
 
 The result: even though $\mathbf{\overline{A}_t}$ and $\mathbf{\overline{B}_t}$​ are different at every timestep, you can still compute all $h_0,h_1,…,h_Lh$​ in parallel during training. The sequential dependency remains, but the sequential computation does not. Training complexity drops from O(L) sequential steps to O(log⁡L) parallel depth.
