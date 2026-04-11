@@ -268,7 +268,7 @@ These shortcomings led to the development of Mamba....
 
 We ended up the section 2 with an insight that S4 models become content blind due to the LTI matrices. So, how do we improve or build upon our S4 model??
 
-One obvious solution is to let the SSM parameters be functions of the input. This addresses their weakness with discrete modalities, allowing the model to selectively propagate or forget information along the sequence length dimension depending on the current token.
+One obvious solution is to let the SSM parameters be functions of the input. This allows the model to selectively propagate or forget information along the sequence length dimension depending on the current token.
 But the moment we do that, the kernel $\overline{K}$ becomes dependant on input and hence it can no longer be pre-computed. So, the convolution trick breaks.
 
 Mamba's contributions are exactly to solve these problems: Content Awareness & Fast training. 
