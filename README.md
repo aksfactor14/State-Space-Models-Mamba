@@ -526,18 +526,183 @@ For T=4, L would look like:
 
 Each entry $L_{ts}$ denotes *how much does position s still influence position t?* If $a_t$​ values are close to 1, the influence decays slowly. If they're close to 0, it decays fast. Here $a_t$​ is input-dependent — different tokens produce different decay rates.
 
+Now look at the full output: $Y = MX =  (L \circ C B^T)XY$ 
+
+Compare this to causal linear attention: $Y = (L_{causal} \circ Q K^T)V$ 
+
+where $L_{\text{causal}}$  is the standard lower-triangular mask. The two expressions are structurally identical if you rename $(C,B,X) \leftrightarrow (Q,K,V)$. The only difference is the mask. In standard linear attention, L is all ones — every past position contributes equally. In SSD, L is a matrix of decaying cumulative products — far positions contribute less.
+
+This is the duality. The same model — one set of parameters, one computation — can be viewed as either a selective SSM recurrence or a masked linear attention. They compute the exact same output.
+
+### 4.4 What is a semi-seperable matrix ? ###
+
+A (lower triangular) matrix 𝑀 is N-semiseparable if every submatrix contained in the lower triangular portion (i.e. on or below the diagonal) has rank at most N. We call N the order or rank of the semiseparable matrix.
+
+Why does this matter? Because structured matrices with low-rank off-diagonal blocks have fast algorithms. The paper's central message is this: Different ways of computing SSMs are just different algorithms for multiplying by the semiseparable matrix M.
+
+The recurrent scan is one algorithm. The naive attention-like matrix multiply is another. The SSD algorithm (coming next) is third (and it is fastest).
+
+### 4.5 The SSD algorithm ###
+
+We now have two ways to compute the same model:
+
++ SSM (recurrent) mode: Compute $h_t = a_t h_{t-1} + B_t x_t$​ step by step. FLOPs scale as O($TN^2$), linear in sequence length. But it's all scalar operations — no tensor cores.
++ Attention (quadratic) mode: Materialize $M = L \circ CB^T$ and compute Y=MX. FLOPs scale as O($T^2 N$), quadratic in sequence length. But it's all matrix multiplications — tensor cores used.
+
+Neither is ideal on its own. The recurrent mode is cheap in FLOPs but hardware-inefficient. The attention mode is hardware-efficient but FLOPs blow up for long sequences. The SSD algorithm combines them. The key idea is a block decomposition of the semiseparable matrix M.
+
+To begin, we partition the matrix 𝑀 into a $\frac{T}{Q} \times \frac{T}{Q}$ grid of submatrices of size Q×Q, for some block size Q. Note that the off-diagonal blocks are low-rank by the defining property of semiseparable matrices.
+
+<img width="626" height="205" alt="image" src="https://github.com/user-attachments/assets/383b6b0b-de1b-4f16-ae35-f0e2c518a3c3" />
+
+This can be illustrated through an example, e.g. for T=9 and decomposing into chunks of length Q=3.The shaded cells are low-rank factorizations of the off-diagonal blocks of the semiseparable matrix.
+
+<img width="568" height="390" alt="image" src="https://github.com/user-attachments/assets/ce720d1d-6307-4a38-9a99-cf742028191c" />
+
+<img width="892" height="471" alt="image" src="https://github.com/user-attachments/assets/1de55181-5367-4790-847c-2c757a514189" />
+
++ First **Split the Sequence into Chunks**. Let's say our sequence has T=9 tokens and we split into chunks of size Q = 3. So we have 3 chunks:
+
+  + Chunk 0: tokens {0,1,2}
+  + Chunk 1: tokens {3,4,5}
+  + Chunk 2: tokens {6,7,8}
+
+  Now partition M into a 3×3 grid of 3×3 blocks:
+
+$$
+M = \begin{bmatrix}
+M^{(0,0)} & 0 & 0 \\
+M^{(1,0)} & M^{(1,1)} & 0 \\
+M^{(2,0)} & M^{(2,1)} & M^{(2,2)}
+\end{bmatrix}
+$$
+
+  The upper triangle is all zeros because M is lower triangular (causality — future can't influence past). Now there are two types of blocks. Let's understand each one separately.
+
++ **The Diagonal Blocks**: $M^(0,0), M^{(1,1)}, M^{(2,2)} sit on the diagonal. Let's look at M^{(1,1)} as a concrete example. It covers rows {3,4,5} and columns {3,4,5} of M:
+
+$$
+M^{(1,1)} = \begin{bmatrix}
+C_3^\top B_3 & 0 & 0 \\
+C_4^\top a_4 B_3 & C_4^\top B_4 & 0 \\
+C_5^\top a_5 a_4 B_3 & C_5^\top a_5 B_4 & C_5^\top B_5
+\end{bmatrix}
+$$
+
+This block answers the question: within chunk 1, how does each token influence the others?
+
+$M^{(1,1)}$ is itself a small semiseparable matrix but it is just for 3 tokens instead of 9. So we can compute it using the quadratic attention form:
+
+$$M^{(1,1)} = L^{(1)} \circ C_{3:6} B_{3:6}^\top$$
+
+where $L^{(1)}$ is the small 3×3 decay mask built from $a_3, a_4, a_5$​. This is a tiny matrix multiply and more importantly uses tensor cores, hence fast.
+
+Key insight about diagonal blocks: They only need inputs from within their own chunk. They are completely independent of all other chunks. So all three diagonal blocks can be computed fully in parallel.
 
 
++ **The off-diagonal blocks**: Now look at $M^{(2,0)}$. It covers rows {6,7,8} and columns {0,1,2}. Entry $M^{(2,0)}_{ts}$​ is:
+
+$$
+M_{ts} = C_t^\top \cdot (a_t \cdots a_{s+1}) \cdot B_s
+$$
+
+For example, 
+$$
+M_{6,0} = C_6^\top \cdot (a_6 a_5 a_4 a_3 a_2 a_1) \cdot B_0
+$$
+
+These entries span across chunk boundaries. Token 0 (in chunk 0) influencing token 6 (in chunk 2) requires carrying information across two chunk boundaries.
+
+The product $a_t \cdots a_{s+1}$​ for any t in chunk 2 and any s in chunk 0 can be split at the chunk boundary:
+
+$$
+a_t \cdots a_{s+1} = \underbrace{(a_t \cdots a_6)}_{\text{chunk 2 part}} \cdot \underbrace{(a_5 a_4 a_3)}_{\text{crossing}} \cdot \underbrace{(a_2 \cdots a_{s+1})}_{\text{chunk 0 part}}
+$$
+
+Hence, the whole block factorizes as: 
+
+$$
+M^{(2,0)} = \underbrace{\begin{bmatrix} C_6^\top a_6 \\ C_7^\top a_7 a_6 \\ C_8^\top a_8 a_7 a_6 \end{bmatrix}}_{\text{C-block (chunk 2)}} \cdot \underbrace{(a_5 a_4 a_3)}_{\text{boundary scalar}} \cdot \underbrace{\begin{bmatrix} a_2 a_1 B_0 & a_2 B_1 & B_2 \end{bmatrix}}_{\text{B-block (chunk 0)}}
+$$
+
+A matrix of shape (3×N) times a scalar times a matrix of shape (N×3). So resultant is (NxN). This is the defining property of semiseparable matrices — all off-diagonal blocks are low rank.
 
 
+1) Step 1 — Intra-chunk outputs (diagonal blocks)
+
+   For each chunk j, compute: $Y_j^{\text{intra}} = M^{(j,j)} \cdot X_j$​
+  This uses only inputs within the chunk and produces outputs assuming the hidden state entering the chunk is zero. It's a small matrix multiply. All chunks computed in parallel and uses the     Tensor cores.
+
+2) Step 2 — Chunk final states (the B-blocks)
+
+  For each chunk j, compute the final hidden state that chunk would produce if it started from zero:
+
+$$
+\text{state}_j = \sum_{s \in \text{chunk } j} (\text{decay from } s \text{ to end of chunk}) \cdot B_s x_s
+$$
+
+  This is the B-block column vector from the low-rank factorization. For chunk 0, this is the vector $[a_2 a_1 B_0 x_0 + a_2 B_1 x_1 + B_2 x_2]$ — i.e. the final state of chunk 0 assuming it     started from zero.
+
+3) Step 3 — Pass states across chunks (the boundary scalars)
+  Now we need to figure out the true initial state for each chunk, taking into account all the chunks that came before it.
+
+  The true initial state of chunk 1 = (boundary scalar) × (local final state of chunk 0).
+  
+  The true initial state of chunk 2 = (boundary scalar) × (true initial state of chunk 1) + (boundary scalar) × (local final state of chunk 1).
+  
+  This is itself a recurrence — but on a sequence of length T/Q instead of T. In our example, 3 chunks instead of 9 tokens. We run a scalar SSM scan on this short sequence.
+  
+  Because this sequence is Q times shorter, the scan is Q times cheaper. Think of it as: "what is the true accumulated hidden state arriving at the start of each chunk, after accounting for       everything before it?"
+
+4) Step 4 — State-to-output correction (the C-blocks)
+
+  Now each chunk knows its true initial state $h_{\text{init}}^{(j)}$​ from Step 3. This initial state also contributes to the outputs within the chunk. We need to add that contribution in.
+
+  For each chunk j, compute:
+
+$$
+Y_j^{\text{correction}} = (\text{C-block of chunk } j) \cdot h_{\text{init}}^{(j)}
+$$
+
+This is the C-block row vector from the low-rank factorization, applied to the initial state. Another batched matrix multiply. All chunks in parallel.
+Think of it as: "given that there was already some hidden state arriving at the start of this chunk, how does it affect the outputs?"
+
+Final output:
+
+$Y^{\text{intra}} + Y^{\text{correction}}$
+
+The intra-chunk part captures within-chunk interactions. The correction part captures how earlier chunks influence later ones through the hidden state.
+
+**Why This Is Fast**: Steps 1, 2, and 4 are all batched matrix multiplications using Tensor cores. Step 3 is a scan — but on a sequence Q times shorter. For Q=64, it's 64× cheaper than a full scan on the original sequence. In practice it takes a negligible fraction of total time.
+
+The total FLOPs are O($TN^2$) — same as the pure SSM recurrence. But now most of those FLOPs go through tensor cores, which are 16× faster than general arithmetic on modern GPUs. That's where the 2–8× speedup over Mamba-1 comes from.
+
+### 4.6 A Numerical Subtlety Worth Knowing ###
+
+Building the matrix L requires computing cumulative products like $a_t \cdot a_{t-1} \cdots a_{s+1}$. If $a_t \approx 0.9$ and T=2000, you're computing $0.9^{2000} \approx 10^{-91}$. That vanishes to zero in floating point immediately.
+
+The natural fix is to work in log-space. Instead of multiplying, you add logs: $$ \log(a_t \cdots a_{s+1}) = \log a_t + \cdots + \log a_{s+1} $$
+
+Then $$ L_{ts} = \exp(\text{segsum}(a)_{ts}) $$ where segsum is a "segment sum" — the sum of log-a values over a contiguous segment [s+1,t].
 
 
+### 4.7 The Mamba 2 block ###
+
+<img width="863" height="470" alt="image" src="https://github.com/user-attachments/assets/d8286200-2e8c-4806-88e1-7d60260ba130" />
+
+Mamba 2 architecture is different from Mamba 1's in the following ways:
+
+1) Parallel vs. Sequential Projections: In Mamba-1, the SSM parameters ($A, B, C$) are generated sequentially after $X$ is processed. In Mamba-2, $A, B, C,$ and $X$ are all projected at the exact same time right at the beginning of the block. This is dine for Hardware efficiency. Generating them in parallel makes it much easier to split the model across multiple GPUs. It mirrors how Transformers efficiently generate $Q, K,$ and $V$ all at once.
+2) Extra Normalization: Mamba-2 adds a new normalization step (the circle labeled "N") right before the final linear projection. This improves model stability. As models scale up in size, this extra normalization keeps the values from exploding or collapsing.
 
 
+One more important clarification: 
 
+You might think that making matrix A scalar and tying all N state dimensions to the same decay scalar $a_t$​, are we throwing away too much expressivity?
 
+This is okay because: In Mamba-1, the different diagonal values of $A_t$  allowed different parts of the hidden state to forget at different rates. But the $B_t$ and $C_t$​ projections already have full freedom to weight how information enters and exits the state. The scalar $a_t$​ controls the *overall* forgetting rate — whether this timestep matters at all. The paper's ablations confirm this: the scalar restriction doesn't hurt quality, especially when N is increased.
 
-
+And increasing N is exactly what SSD enables. Mamba-1 was limited to N=16 because the scan cost scaled with N. SSD is dominated by matrix multiplications, so larger N can be used. Mamba-2 uses N=64 or 128 or even 156. More state capacity means the model can remember more — and that turns out to matter a lot.
 
 
 
