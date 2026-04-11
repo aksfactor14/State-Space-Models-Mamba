@@ -465,6 +465,14 @@ In practice, the fused selective scan is 20–40× faster than standard PyTorch 
 
 So, this Mamba architecture's image summarizes the whole flow we have discussed till now. This was Mamba 1.....
 
+---
+
+## 4. Mamba 2: Transformers are SSMs: Generalized Models and Efficient Algorithms Through Structured State Space Duality ##
+
+
+
+
+
 
 
 
