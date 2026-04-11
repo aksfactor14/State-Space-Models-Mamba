@@ -490,6 +490,48 @@ On the surface this looks like a loss of expressivity but as we see later this e
 
 ### 4.2 Writing SSM as matrix ###
 
+If we unroll the entire recurrence of and write the entire seqeunce transformation as single matrix equation: 
+
+$h_t = \sum_{s=0}^{t} \left( A_t A_{t-1} \cdots A_{s+1} \right) B_s x_s$
+
+Multiply by ${C_t}^T} to obtain the output: 
+
+$y_t = \sum_{s=0}^{t} C_t^{\top} \left( A_t \cdots A_{s+1} \right) B_s \cdot x_s$
+
+Thus you can see that the full output sequence can be written as a matrix multiplication Y=MX where M is a lower-triangular (T×T) matrix with entries:
+
+$$M_{ts} = C_t^\top \cdot A_{t:s}^\times \cdot B_s$$
+
+where we define $A_{t:s}^\times = A_t A_{t-1} \cdots A_{s+1}$. 
+
+<img width="892" height="458" alt="image" src="https://github.com/user-attachments/assets/ff5cc4dc-2e5c-4e36-b23a-6dc7e9930c79" />
+
+Thus we wrote the SSM written as a single matrix. This matrix M satisfies some special properties: 
+1) Lower-triangular (causal)
+2) Every submatrix below or on the diagonal is low rank — at most rank N.
+
+These kind of matrices are callled semiseparable matrices. 
+
+### 4.3 Duality Property between SSM and attention ###
+
+Now here's where the scalar-identity restriction on $A_t$​ becomes powerful. If $A_t = a_t \cdot I$, then the product $A_{t:s}^\times = a_t a_{t-1} \cdots a_{s+1}$ is just a scalar. Scalars commute with everything, so we can factor them out of $M_{ts}$​:
+
+<img width="301" height="53" alt="image" src="https://github.com/user-attachments/assets/f4949012-8f43-4b2e-872c-34aae3aa0044" />
+
+In matrix form, this becomes $M = L \circ C B^T$ where $\circ$ denotes the hadamard product(elementwise multiplication) and L is the matrix of cumulative products.
+
+For T=4, L would look like: 
+
+<img width="228" height="86" alt="image" src="https://github.com/user-attachments/assets/8f826e46-0be8-4312-9d45-d01b713c423a" />
+
+Each entry $L_{ts}$ denotes *how much does position s still influence position t?* If $a_t$​ values are close to 1, the influence decays slowly. If they're close to 0, it decays fast. Here $a_t$​ is input-dependent — different tokens produce different decay rates.
+
+
+
+
+
+
+
 
 
 
