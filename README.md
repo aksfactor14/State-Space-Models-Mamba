@@ -469,7 +469,26 @@ So, this Mamba architecture's image summarizes the whole flow we have discussed 
 
 ## 4. Mamba 2: Transformers are SSMs: Generalized Models and Efficient Algorithms Through Structured State Space Duality ##
 
+So we ended Section 3 with a working Mamba-1. It was selective, hardware-aware, and could train in parallel using the parallel scan. It was a genuine improvement over S4 and competitive with Transformers on language modeling.
 
+But it still suffered with few problems:
+1) Mamba-1 was slow to train because the selective scan didn't use tensor cores. Tensor cores are specialized hardware units on modern GPUs that are built to do matrix multiplications extremely fast. Mamba-1's scan was doing general arithmetic — it was leaving most of the GPU idle.
+2) SSMs and attention felt conceptually disconnected. The authors wanted to understand: is there a deeper relationship between SSMs and attention?
+   
+Mamba-2 answers both problems through an idea called Structured State Space Duality (SSD). The word "duality" means: the same model can be written in two completely different forms. One form looks like an SSM recurrence. The other looks like attention. And this duality is what unlocks the speed.
+
+### 4.1 $A_t$ as scalar time identity ###
+
+In Mamba-1, $A_t$​ was a diagonal matrix of shape (N×N) which means N independent values along its diagonal — one per state dimension. This meant each of the N elements of the hidden state had its own individual decay rate.
+
+Mamba-2 makes one small restriction. It forces $A_t$ to be a scalar times identity:
+$A_t = a_t \cdot I$
+
+Instead of N different diagonal values, every element of the hidden state shares the same scalar $a_t∈R$. 
+
+On the surface this looks like a loss of expressivity but as we see later this enables the SSMs to be rewritten as a matrix multiplication which will help us to solve both the problems described above. Let's see how
+
+### 4.2 Writing SSM as matrix ###
 
 
 
