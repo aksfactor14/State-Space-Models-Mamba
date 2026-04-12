@@ -109,19 +109,19 @@ It maps a 1-D input signal x(t) to an N-D latent state h(t) before projecting to
 
 Our goal is to simply use the SSM as a black-box representation in a deep sequence model, where B,C,D are parameters learned by gradient descent and A is a special HiPPO matrix(covered in upcoming section). For the remainder of this blog, we will omit the parameter D for exposition because the term $Dx$ can be viewed as a skip connection and is easy to compute.
 
-This state space model is linear and time invariant. Linear because the relationships in the expressions above are linear, and time invariant becuase A,B,C,D do not depend on time(they are fixed).
+This state space model is linear and time invariant. Linear because the relationships in the expressions above are linear, and time invariant because A,B,C,D do not depend on time(they are fixed).
 
 Note: for now consider A, B, C, D, x(t), h(t) and y(t) to be numbers, not vectors. Later we will extend our analysis to vectors.
 
 **Significance of Matrix A**: The A matrix in the SSM “captures” information from the previous state to build the new state. It determines how this information is propagated over time. Because of this, its structure must be designed carefully—otherwise, it may fail to effectively retain the history of past inputs. To make the A matrix behave well, the authors chose to use the HIPPO theory. Let’s see how it works!
 
 
-### 2.2 Adressing long range dependencies using HiPPO ###
+### 2.2 Addressing long range dependencies using HiPPO ###
 
 HiPPO specifies a class of certain matrices $A ∈ R^N×N$ that when incorporated into SSM, allows the state h(t) to memorize the history of the input x(t). The most important matrix in this class is defined by below equation, which we will call the HiPPO matrix: 
 <img width="610" height="110" alt="image" src="https://github.com/user-attachments/assets/71603f1a-5854-402f-861a-524b829d024b" />
 
-For those not intersted to know idea behind HiPPO and directly use the above A matrix can skip to section 2.3.
+For those not interested to know idea behind HiPPO and directly use the above A matrix can skip to section 2.3.
 
 At every time step, a sequence model must summarize everything seen so far, not just the last few tokens. And it must do this with a fixed-size vector. This is a compression problem. HiPPO reframes memory as: at every time t, find the best polynomial approximation of the input history f(x) for x ≤ t. 
 
@@ -196,7 +196,7 @@ just to avoid confusion later, I would like to make it clear that S4 paper used 
 <img width="1039" height="140" alt="image" src="https://github.com/user-attachments/assets/844e2a9c-7811-4440-9682-cb87c45d5624" />
 
 
-Now the result of discretization is that the SSM equation ius now a sequence-to-sequence map $u_k → y_k$ instead of function-to-function. Moreover the state equation is now a recurrence in $x_k$, allowing the discrete SSM to be computed like an RNN. $x_k ∈ R^N$ can be viewed as a hidden state with transition matrix A.
+Now the result of discretization is that the SSM equation is now a sequence-to-sequence map $u_k → y_k$ instead of function-to-function. Moreover the state equation is now a recurrence in $x_k$, allowing the discrete SSM to be computed like an RNN. $x_k ∈ R^N$ can be viewed as a hidden state with transition matrix A.
 
 
 ### 2.4 Computing the SSM ###
@@ -209,7 +209,7 @@ $$h_t = \mathbf{\overline{A}}h_{t-1} + \mathbf{\overline{B}}x_t$$
 
 $$y_t = \mathbf{C}h_t$$
 
-During inference, this is beautiful. To generate the next token, you only need the current input $x_t$ and the previous compressed state $h_{t-1}$. It requires constant $O(1)$ memory and time. But during training, this is terrible as you have o compute all tokens sequentially. You cannot compute $h_3$ until you finish computing $h_2$. It completely wastes the massive parallel compute power of modern GPUs.
+During inference, this is beautiful. To generate the next token, you only need the current input $x_t$ and the previous compressed state $h_{t-1}$. It requires constant $O(1)$ memory and time. But during training, this is terrible as you have to compute all tokens sequentially. You cannot compute $h_3$ until you finish computing $h_2$. It completely wastes the massive parallel compute power of modern GPUs.
 <img width="656" height="295" alt="image" src="https://github.com/user-attachments/assets/dcfccd72-df64-470d-a68e-9d6b425f041c" />
 
 
@@ -269,7 +269,7 @@ These shortcomings led to the development of Mamba....
 We ended up the section 2 with an insight that S4 models become content blind due to the LTI matrices. So, how do we improve or build upon our S4 model??
 
 One obvious solution is to let the SSM parameters be functions of the input. This allows the model to selectively propagate or forget information along the sequence length dimension depending on the current token.
-But the moment we do that, the kernel $\overline{K}$ becomes dependant on input and hence it can no longer be pre-computed. So, the convolution trick breaks.
+But the moment we do that, the kernel $\overline{K}$ becomes dependent on input and hence it can no longer be pre-computed. So, the convolution trick breaks.
 
 Mamba's contributions are exactly to solve these problems: Content Awareness & Fast training. 
 
@@ -304,7 +304,7 @@ Notice the new dimension L(sequence length) in these shapes. In S4, B and C had 
 
 This is the selection mechanism. The model is no longer time-invariant. It is now time-varying.
 
-A stays fixed by the way. But since $\mathbf{\overline{A}}$ = $exp($\Delta_t$A)$ and $\Delta_t$ is input-dependant so $\mathbf{\overline{A}}$ becomes input dependant too.
+A stays fixed by the way. But since $\mathbf{\overline{A}}$ = $exp($\Delta_t$A)$ and $\Delta_t$ is input-dependent so $\mathbf{\overline{A}}$ becomes input dependent too.
 
 
 1) **The projections for $B_t$ and $C_t$:** 
@@ -396,7 +396,7 @@ Every time you want to run a computation, you first load data from HBM into SRAM
 
 **The Problem with a Naive Implementation**
 
-Let's see what happens if you implement the selective scan the obvious way in PyTorch. The hidden state at each step has shape (B,L,D,N). Here N s the state dimesnion. For an actual Mamba model(say 1.4B parameters) this tensor is enormous.
+Let's see what happens if you implement the selective scan the obvious way in PyTorch. The hidden state at each step has shape (B,L,D,N). Here N s the state dimension. For an actual Mamba model(say 1.4B parameters) this tensor is enormous.
 
 A naive implementation would:
 
@@ -471,7 +471,7 @@ So, this Mamba architecture's image summarizes the whole flow we have discussed 
 
 So we ended Section 3 with a working Mamba-1. It was selective, hardware-aware, and could train in parallel using the parallel scan. It was a genuine improvement over S4 and competitive with Transformers on language modeling.
 
-But it still suffered with few problems:
+But it still suffered with a few problems:
 1) Mamba-1 was slow to train because the selective scan didn't use tensor cores. Tensor cores are specialized hardware units on modern GPUs that are built to do matrix multiplications extremely fast. Mamba-1's scan was doing general arithmetic — it was leaving most of the GPU idle.
 2) SSMs and attention felt conceptually disconnected. The authors wanted to understand: is there a deeper relationship between SSMs and attention?
    
@@ -508,9 +508,9 @@ Thus we wrote the SSM written as a single matrix. This matrix M satisfies some s
 1) Lower-triangular (causal)
 2) Every submatrix below or on the diagonal is low rank — at most rank N.
 
-These kind of matrices are callled **semiseparable matrices**. 
+These kinds of matrices are called **semiseparable matrices**. 
 
-### 4.3 What is a semi-seperable matrix ? ###
+### 4.3 What is a semiseperable matrix ? ###
 
 A (lower triangular) matrix 𝑀 is N-semiseparable if every submatrix contained in the lower triangular portion (i.e. on or below the diagonal) has rank at most N. We call N the order or rank of the semiseparable matrix.
 
@@ -524,7 +524,7 @@ Now here's where the scalar-identity restriction on $A_t$​ becomes powerful. I
 
 $$M_{ts} = C_t^\top \cdot \underbrace{(a_t \cdots a_{s+1})}_{L_{ts}} \cdot B_s = L_{ts} \cdot (C_t^\top B_s)$$
 
-In matrix form, this becomes $M = L \circ C B^T$ where $\circ$ denotes the hadamard product(elementwise multiplication) and L is the matrix of cumulative products.
+In matrix form, this becomes $M = L \circ C B^T$ where $\circ$ denotes the Hadamard product(elementwise multiplication) and L is the matrix of cumulative products.
 
 For T=4, L would look like: 
 
@@ -687,7 +687,7 @@ Then $$L_{ts} = \exp(\text{segsum}(a)_{ts})$$ where segsum is a "segment sum" �
 
 Mamba 2 architecture is different from Mamba 1's in the following ways:
 
-1) Parallel vs. Sequential Projections: In Mamba-1, the SSM parameters ($A, B, C$) are generated sequentially after $X$ is processed. In Mamba-2, $A, B, C,$ and $X$ are all projected at the exact same time right at the beginning of the block. This is dine for Hardware efficiency. Generating them in parallel makes it much easier to split the model across multiple GPUs. It mirrors how Transformers efficiently generate $Q, K,$ and $V$ all at once.
+1) Parallel vs. Sequential Projections: In Mamba-1, the SSM parameters ($A, B, C$) are generated sequentially after $X$ is processed. In Mamba-2, $A, B, C,$ and $X$ are all projected at the exact same time right at the beginning of the block. This is done for Hardware efficiency. Generating them in parallel makes it much easier to split the model across multiple GPUs. It mirrors how Transformers efficiently generate $Q, K,$ and $V$ all at once.
 2) Extra Normalization: Mamba-2 adds a new normalization step (the circle labeled "N") right before the final linear projection. This improves model stability. As models scale up in size, this extra normalization keeps the values from exploding or collapsing.
 
 
@@ -709,7 +709,7 @@ And increasing N is exactly what SSD enables. Mamba-1 was limited to N=16 becaus
 
 To make things practical, I ran zero-shot evaluations on three benchmarks using the lm-evaluation-harness, same like in the Mamba paper. I checked Mamba-1, Mamba-2, and also two transformer baselines.
 
-I could not benchmark Mamba-3 becuase its pre-trained weights have not been released yet.
+I could not benchmark Mamba-3 because its pre-trained weights have not been released yet.
 
 ### 6.1 Benchmarks Used ###
 
@@ -758,7 +758,7 @@ Models evaluated:
 **What These Numbers Mean**: 
 
 + On HellaSwag, random chance is 0.25 (choosing out of four options), human performance is around 0.95, and models like LLaMA-3 8B reach approximately 0.82. Our models scoring ~0.59-0.60 shows they have learned meaningful language representations, but a large gap to human-level reasoning remains — one that generally closes with scale.
-+ On LAMBADA, a perplexity of ~5.0 for Mamba models is strong at this parameter count. For reference, GPT-2 1.5B scores around 8.6. So Mamba at 5.0 with fewer parameters is performing well on this.
++ On LAMBADA, a perplexity of ~5.0 for Mamba models is strong at this parameter count. For reference, GPT-2 1.5B scores around 8.6. So Mamba at 5.0 with a fewer parameters is performing well on this.
 + On ARC Challenge, scores around 0.30-0.33 reflect how hard this benchmark is. Random chance is 0.25 and even LLaMA-3 8B only reaches ~0.57. ARC requires reasoning that only emerges reliably at much larger scales.
 Across all three, Mamba consistently sits at the top of the 1-1.4B range, which is the key takeaway.
 
@@ -769,7 +769,7 @@ When lm_eval runs HellaSwag, it scores each of the 4 candidate completions by co
 
 $$\log P(\text{completion}) = \sum_{i=1}^{n} \log P(\text{token}_i)$$
 
-Each individual token probability is less than 1, so its log is negative. This means the more tokens a completion has, the more negative its total score becomes becuase of adding more negative numbers.
+Each individual token probability is less than 1, so its log is negative. This means the more tokens a completion has, the more negative its total score becomes because of adding more negative numbers.
 
 acc_norm divides the total log-probability by the number of tokens:
 
