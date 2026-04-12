@@ -516,13 +516,18 @@ These kind of matrices are callled semiseparable matrices.
 
 Now here's where the scalar-identity restriction on $A_t$​ becomes powerful. If $A_t = a_t \cdot I$, then the product $A_{t:s}^\times = a_t a_{t-1} \cdots a_{s+1}$ is just a scalar. Scalars commute with everything, so we can factor them out of $M_{ts}$​:
 
-<img width="301" height="53" alt="image" src="https://github.com/user-attachments/assets/f4949012-8f43-4b2e-872c-34aae3aa0044" />
+$$M_{ts} = C_t^\top \cdot \underbrace{(a_t \cdots a_{s+1})}_{L_{ts}} \cdot B_s = L_{ts} \cdot (C_t^\top B_s)$$
 
 In matrix form, this becomes $M = L \circ C B^T$ where $\circ$ denotes the hadamard product(elementwise multiplication) and L is the matrix of cumulative products.
 
 For T=4, L would look like: 
 
-<img width="228" height="86" alt="image" src="https://github.com/user-attachments/assets/8f826e46-0be8-4312-9d45-d01b713c423a" />
+$$L = \begin{bmatrix}
+1 & & & \\
+a_1 & 1 & & \\
+a_2a_1 & a_2 & 1 & \\
+a_3a_2a_1 & a_3a_2 & a_3 & 1
+\end{bmatrix}$$
 
 Each entry $L_{ts}$ denotes *how much does position s still influence position t?* If $a_t$​ values are close to 1, the influence decays slowly. If they're close to 0, it decays fast. Here $a_t$​ is input-dependent — different tokens produce different decay rates.
 
@@ -667,9 +672,7 @@ $$
 This is the C-block row vector from the low-rank factorization, applied to the initial state. Another batched matrix multiply. All chunks in parallel.
 Think of it as: "given that there was already some hidden state arriving at the start of this chunk, how does it affect the outputs?"
 
-Final output:
-
-$Y^{\text{intra}} + Y^{\text{correction}}$
+Final output: $Y^{\text{intra}} + Y^{\text{correction}}$
 
 The intra-chunk part captures within-chunk interactions. The correction part captures how earlier chunks influence later ones through the hidden state.
 
