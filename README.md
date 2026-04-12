@@ -707,34 +707,60 @@ And increasing N is exactly what SSD enables. Mamba-1 was limited to N=16 becaus
 
 ## 6. Benchmarking Mamba-1, Mamba-2 and Transformers on HellaSwag ##
 
-To make things practical, I ran zero-shot evaluations on HellaSwag commonsense reasoning benchmark using the lm-evaluation-harness, same like in the Mamba paper. I checked Mamba-1, Mamba-2, and also two transformer baselines on the HellaSwag dataset.
+To make things practical, I ran zero-shot evaluations on three benchmarks using the lm-evaluation-harness, same like in the Mamba paper. I checked Mamba-1, Mamba-2, and also two transformer baselines.
 
 I could not benchmark Mamba-3 becuase its pre-trained weights have not been released yet.
 
-### 6.1 Setup ###
+### 6.1 Benchmarks Used ###
 
-All models were evaluated zero-shot (n-shot = 0), meaning no examples were provided before testing. The primary metric reported is acc_norm (length-normalized accuracy) which corrects for the model's natural bias toward shorter answers and is the standard metric for HellaSwag comparisons.
++ **HellaSwag**: A commonsense reasoning benchmark where the model must pick the most plausible continuation of a sentence from four choices. It tests whether the model understands everyday situations and physical common sense.
++ **LAMBADA OpenAI**: Tests whether the model can predict the last word of a passage that requires understanding the broader context of the whole paragraph — not just the last few words. It measures long-range language coherence. Lower perplexity and higher accuracy are both better here.
++ **ARC Challenge**: Comprises of grade-school science questions specifically designed to be hard. Questions that simple word-matching or retrieval cannot answer. It requires reasoning ability.
+
+
+### 6.2 Setup ###
+
+All models were evaluated zero-shot (n-shot = 0), meaning no examples were provided before testing. The primary metric for HellaSwag and ARC Challenge is acc_norm (length-normalized accuracy) which corrects for the model's natural bias toward shorter answers. For LAMBADA, both perplexity and acc are reported.
 
 Models evaluated:
 
-+ Mamba-1 350M and 1.4B — the selective SSM from Section 3
-+ Mamba-2 350M and 1.3B — the SSD-based architecture from Section 4
-+ Pythia 1.4B — a transformer trained on the same dataset as Mamba (The Pile), making it a clean controlled comparison
++ Mamba-1 1.4B — the selective SSM from Section 3
++ Mamba-2 1.3B — the SSD-based architecture from Section 4
++ Pythia 1.4B — a transformer trained on the same dataset as Mamba (The Pile), making it the cleanest comparison.
 + TinyLlama 1.1B — a modern transformer using the LLaMA architecture with RoPE, SwiGLU, and grouped query attention
 
-### 6.2 Results ###
+### 6.3 Results ###
 
-<img width="709" height="325" alt="image" src="https://github.com/user-attachments/assets/49b7cea7-4d69-4ce0-a097-19aa854c4310" />
+<img width="680" height="344" alt="image" src="https://github.com/user-attachments/assets/db536e2a-818d-4f2d-b969-b18107a57a8d" />
 
 
-### 6.3 Observations ###
 
-1) Mamba-1 matches transformers at the same parameter count. Mamba-1 1.4B and TinyLlama 1.1B score 0.5913 and 0.5920 respectively, which is almost identical. This is significant because TinyLlama uses years of accumulated transformer engineering (RoPE, SwiGLU, grouped query attention) — while Mamba-1 uses no attention mechanism at all.
+### 6.4 Observations ###
+
+**HellaSwag**
+
+1) Mamba-1 matches transformers at the same parameter count. Mamba-1 1.4B and TinyLlama 1.1B score 0.5913 and 0.5920 respectively, which is almost identical. This is significant because TinyLlama uses years of accumulated transformer engineering (RoPE, SwiGLU, grouped query attention) while Mamba-1 uses no attention mechanism at all.
 2) Mamba-1 outperforms Pythia at the same size. Both are 1.4B models trained on The Pile dataset, making this the cleanest comparison. Mamba-1 scores 0.5913 against Pythia's 0.5197. Hence, Mamba-1 scores somewhat better than its corresponding transformer rival Pythia.
-3) Mamba-2 350M underperforms Mamba-1 350M. This is because Mamba-2 was not designed to improve benchmark accuracy at small scales. Its SSD algorithm and larger state dimensions are built to improve hardware efficiency and scale better. So, see that at 1.3B, Mamba-2 achieves the highest score in the table (0.5994), suggesting its architecture benefits more from scale.
-4) The gap between acc and acc_norm is large across all models. Example: Mamba-1 1.4B goes from 0.4505 to 0.5913 after normalization. This tells that without length normalization, models penalize longer answers unfairly, hence acc_norm is the right metric to use here.
+3) Mamba-2 achieves the highest score (0.5994), again showing its architecture benefits more from scale.
 
-**What These Numbers Mean**: A score of ~0.60 on HellaSwag is in the expected range for 1-1.4B parameter models. For context, random chance is 0.25 (chosing our of four choices), human performance is around 0.95, and models like LLaMA-3 8B reach approximately 0.82. So these models have clearly learned meaningful language representations, but there is still a large gap to human-level commonsense reasoning that generally closes with scale.
+**LAMBADA OpenAI**
+
+1) Both Mamba-1 1.4B and Mamba-2 1.3B achieve perplexity around 5.0, while Pythia sits at 6.09 and TinyLlama at 6.93. This implies Mamba is clearly better at long-range language coherence.
+2) On accuracy, Mamba-2 1.3B scores highest at 0.6555, followed by Mamba-1 1.4B at 0.6493. Both clearly outperform Pythia (0.6158) and TinyLlama (0.5882).
+3) This result makes sense given Mamba's architecture. LAMBADA rewards models that can maintain context over long passages — exactly what SSMs with their efficient state compression are designed to do.
+
+**ARC Challenge**
+
+1) ARC Challenge is the hardest benchmark of the three. Thus, all models are in the 0.28–0.33 range on acc_norm, showing that genuine scientific reasoning remains difficult at this scale of parameters.
+2) Mamba-2 1.3B scores highest at 0.3319, closely followed by Mamba-1 1.4B at 0.3294. Both outperform Pythia (0.2833) and TinyLlama (0.3012).
+3) The fact that both Mamba models beat TinyLlama here is notable — TinyLlama uses a more modern transformer architecture, yet Mamba still edges ahead on reasoning tasks.
+
+**What These Numbers Mean**: 
+
++ On HellaSwag, random chance is 0.25 (choosing out of four options), human performance is around 0.95, and models like LLaMA-3 8B reach approximately 0.82. Our models scoring ~0.59-0.60 shows they have learned meaningful language representations, but a large gap to human-level reasoning remains — one that generally closes with scale.
++ On LAMBADA, a perplexity of ~5.0 for Mamba models is strong at this parameter count. For reference, GPT-2 1.5B scores around 8.6. So Mamba at 5.0 with fewer parameters is performing well on this.
++ On ARC Challenge, scores around 0.30-0.33 reflect how hard this benchmark is. Random chance is 0.25 and even LLaMA-3 8B only reaches ~0.57. ARC requires reasoning that only emerges reliably at much larger scales.
+Across all three, Mamba consistently sits at the top of the 1-1.4B range, which is the key takeaway.
 
 
 #### Clarification about how accuracy is calculated ####
