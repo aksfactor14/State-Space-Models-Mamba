@@ -477,7 +477,7 @@ But it still suffered with few problems:
    
 Mamba-2 answers both problems through an idea called Structured State Space Duality (SSD). The word "duality" means: the same model can be written in two completely different forms. One form looks like an SSM recurrence. The other looks like attention. And this duality is what unlocks the speed.
 
-### 4.1 $A_t$ as scalar time identity ###
+### 4.1 $A_t$ as scalar times identity ###
 
 In Mamba-1, $A_t$​ was a diagonal matrix of shape (N×N) which means N independent values along its diagonal — one per state dimension. This meant each of the N elements of the hidden state had its own individual decay rate.
 
