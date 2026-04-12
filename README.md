@@ -481,9 +481,7 @@ Mamba-2 answers both problems through an idea called Structured State Space Dual
 
 In Mamba-1, $A_t$​ was a diagonal matrix of shape (N×N) which means N independent values along its diagonal — one per state dimension. This meant each of the N elements of the hidden state had its own individual decay rate.
 
-Mamba-2 makes one small restriction. It forces $A_t$ to be a scalar times identity:
-$A_t = a_t \cdot I$
-
+Mamba-2 makes one small restriction. It forces $A_t$ to be a scalar times identity: $A_t = a_t \cdot I$  
 Instead of N different diagonal values, every element of the hidden state shares the same scalar $a_t∈R$. 
 
 On the surface this looks like a loss of expressivity but as we see later this enables the SSMs to be rewritten as a matrix multiplication which will help us to solve both the problems described above. Let's see how
@@ -494,7 +492,7 @@ If we unroll the entire recurrence of and write the entire seqeunce transformati
 
 $h_t = \sum_{s=0}^{t} \left( A_t A_{t-1} \cdots A_{s+1} \right) B_s x_s$
 
-Multiply by ${C_t}^T} to obtain the output: 
+Multiply by ${C_t}^T$ to obtain the output: 
 
 $y_t = \sum_{s=0}^{t} C_t^{\top} \left( A_t \cdots A_{s+1} \right) B_s \cdot x_s$
 
@@ -502,7 +500,7 @@ Thus you can see that the full output sequence can be written as a matrix multip
 
 $$M_{ts} = C_t^\top \cdot A_{t:s}^\times \cdot B_s$$
 
-where we define $A_{t:s}^\times = A_t A_{t-1} \cdots A_{s+1}$. 
+where we have $A_{t:s}^\times = A_t A_{t-1} \cdots A_{s+1}$. (because s<t: lower triangular matrix)
 
 <img width="892" height="458" alt="image" src="https://github.com/user-attachments/assets/ff5cc4dc-2e5c-4e36-b23a-6dc7e9930c79" />
 
@@ -510,9 +508,17 @@ Thus we wrote the SSM written as a single matrix. This matrix M satisfies some s
 1) Lower-triangular (causal)
 2) Every submatrix below or on the diagonal is low rank — at most rank N.
 
-These kind of matrices are callled semiseparable matrices. 
+These kind of matrices are callled **semiseparable matrices**. 
 
-### 4.3 Duality Property between SSM and attention ###
+### 4.3 What is a semi-seperable matrix ? ###
+
+A (lower triangular) matrix 𝑀 is N-semiseparable if every submatrix contained in the lower triangular portion (i.e. on or below the diagonal) has rank at most N. We call N the order or rank of the semiseparable matrix.
+
+Why does this matter? Because structured matrices with low-rank off-diagonal blocks have fast algorithms. The paper's central message is this: Different ways of computing SSMs are just different algorithms for multiplying by the semiseparable matrix M.
+
+The recurrent scan is one algorithm. The naive attention-like matrix multiply is another. The SSD algorithm (coming next) is third (and it is fastest).
+
+### 4.4 Duality Property between SSM and attention ###
 
 Now here's where the scalar-identity restriction on $A_t$​ becomes powerful. If $A_t = a_t \cdot I$, then the product $A_{t:s}^\times = a_t a_{t-1} \cdots a_{s+1}$ is just a scalar. Scalars commute with everything, so we can factor them out of $M_{ts}$​:
 
@@ -531,21 +537,10 @@ a_3a_2a_1 & a_3a_2 & a_3 & 1
 
 Each entry $L_{ts}$ denotes *how much does position s still influence position t?* If $a_t$​ values are close to 1, the influence decays slowly. If they're close to 0, it decays fast. Here $a_t$​ is input-dependent — different tokens produce different decay rates.
 
-Now look at the full output: $Y = MX =  (L \circ C B^T)XY$ 
+Now look at the full output: $Y = MX =  (L \circ C B^T)XY$. Compare this to causal linear attention: $Y = (L_{causal} \circ Q K^T)V$, where $L_{\text{causal}}$  is the standard lower-triangular mask. The two expressions are structurally identical if you rename $(C,B,X) \leftrightarrow (Q,K,V)$. The only difference is the mask. In standard linear attention, L is all ones — every past position contributes equally. In SSD, L is a matrix of decaying cumulative products — far positions contribute less.
 
-Compare this to causal linear attention: $Y = (L_{causal} \circ Q K^T)V$ 
+This is the duality: the same model can be viewed as either a selective SSM recurrence or a masked linear attention. They compute the exact same output.
 
-where $L_{\text{causal}}$  is the standard lower-triangular mask. The two expressions are structurally identical if you rename $(C,B,X) \leftrightarrow (Q,K,V)$. The only difference is the mask. In standard linear attention, L is all ones — every past position contributes equally. In SSD, L is a matrix of decaying cumulative products — far positions contribute less.
-
-This is the duality. The same model — one set of parameters, one computation — can be viewed as either a selective SSM recurrence or a masked linear attention. They compute the exact same output.
-
-### 4.4 What is a semi-seperable matrix ? ###
-
-A (lower triangular) matrix 𝑀 is N-semiseparable if every submatrix contained in the lower triangular portion (i.e. on or below the diagonal) has rank at most N. We call N the order or rank of the semiseparable matrix.
-
-Why does this matter? Because structured matrices with low-rank off-diagonal blocks have fast algorithms. The paper's central message is this: Different ways of computing SSMs are just different algorithms for multiplying by the semiseparable matrix M.
-
-The recurrent scan is one algorithm. The naive attention-like matrix multiply is another. The SSD algorithm (coming next) is third (and it is fastest).
 
 ### 4.5 The SSD algorithm ###
 
@@ -564,7 +559,7 @@ This can be illustrated through an example, e.g. for T=9 and decomposing into ch
 
 <img width="568" height="390" alt="image" src="https://github.com/user-attachments/assets/ce720d1d-6307-4a38-9a99-cf742028191c" />
 
-<img width="892" height="471" alt="image" src="https://github.com/user-attachments/assets/1de55181-5367-4790-847c-2c757a514189" />
+<img width="600" height="320" alt="image" src="https://github.com/user-attachments/assets/1de55181-5367-4790-847c-2c757a514189" />
 
 + First **Split the Sequence into Chunks**. Let's say our sequence has T=9 tokens and we split into chunks of size Q = 3. So we have 3 chunks:
 
@@ -584,7 +579,7 @@ $$
 
   The upper triangle is all zeros because M is lower triangular (causality — future can't influence past). Now there are two types of blocks. Let's understand each one separately.
 
-+ **The Diagonal Blocks**: $M^(0,0), M^{(1,1)}, M^{(2,2)} sit on the diagonal. Let's look at M^{(1,1)} as a concrete example. It covers rows {3,4,5} and columns {3,4,5} of M:
++ **The Diagonal Blocks**: $M^(0,0), M^{(1,1)}, M^{(2,2)}$ sit on the diagonal. Let's look at $M^{(1,1)}$ as a concrete example. It covers rows {3,4,5} and columns {3,4,5} of M:
 
 $$
 M^{(1,1)} = \begin{bmatrix}
@@ -611,10 +606,7 @@ $$
 M_{ts} = C_t^\top \cdot (a_t \cdots a_{s+1}) \cdot B_s
 $$
 
-For example, 
-$$
-M_{6,0} = C_6^\top \cdot (a_6 a_5 a_4 a_3 a_2 a_1) \cdot B_0
-$$
+For example, $$M_{6,0} = C_6^\top \cdot (a_6 a_5 a_4 a_3 a_2 a_1) \cdot B_0$$
 
 These entries span across chunk boundaries. Token 0 (in chunk 0) influencing token 6 (in chunk 2) requires carrying information across two chunk boundaries.
 
@@ -626,19 +618,21 @@ $$
 
 Hence, the whole block factorizes as: 
 
-$$
-M^{(2,0)} = \underbrace{\begin{bmatrix} C_6^\top a_6 \\ C_7^\top a_7 a_6 \\ C_8^\top a_8 a_7 a_6 \end{bmatrix}}_{\text{C-block (chunk 2)}} \cdot \underbrace{(a_5 a_4 a_3)}_{\text{boundary scalar}} \cdot \underbrace{\begin{bmatrix} a_2 a_1 B_0 & a_2 B_1 & B_2 \end{bmatrix}}_{\text{B-block (chunk 0)}}
-$$
+$$M^{(2,0)} = \underbrace{\begin{bmatrix} 
+C_6^\top a_6 \\ 
+C_7^\top a_7 a_6 \\ 
+C_8^\top a_8 a_7 a_6 
+\end{bmatrix}}_{\text{C-block (chunk 2)}} \cdot \underbrace{(a_5 a_4 a_3)}_{\text{boundary scalar}} \cdot \underbrace{\begin{bmatrix} a_2 a_1 B_0 & a_2 B_1 & B_2 \end{bmatrix}}_{\text{B-block (chunk 0)}}$$
 
 A matrix of shape (3×N) times a scalar times a matrix of shape (N×3). So resultant is (NxN). This is the defining property of semiseparable matrices — all off-diagonal blocks are low rank.
 
 
 1) Step 1 — Intra-chunk outputs (diagonal blocks)
-
+   
    For each chunk j, compute: $Y_j^{\text{intra}} = M^{(j,j)} \cdot X_j$​
-  This uses only inputs within the chunk and produces outputs assuming the hidden state entering the chunk is zero. It's a small matrix multiply. All chunks computed in parallel and uses the     Tensor cores.
+    This uses only inputs within the chunk and produces outputs assuming the hidden state entering the chunk is zero. It's a small matrix multiply. All chunks computed in parallel and uses the     Tensor cores.
 
-2) Step 2 — Chunk final states (the B-blocks)
+3) Step 2 — Chunk final states (the B-blocks)
 
   For each chunk j, compute the final hidden state that chunk would produce if it started from zero:
 
@@ -651,13 +645,11 @@ $$
 3) Step 3 — Pass states across chunks (the boundary scalars)
   Now we need to figure out the true initial state for each chunk, taking into account all the chunks that came before it.
 
-  The true initial state of chunk 1 = (boundary scalar) × (local final state of chunk 0).
-  
+  The true initial state of chunk 1 = (boundary scalar) × (local final state of chunk 0).  
   The true initial state of chunk 2 = (boundary scalar) × (true initial state of chunk 1) + (boundary scalar) × (local final state of chunk 1).
   
-  This is itself a recurrence — but on a sequence of length T/Q instead of T. In our example, 3 chunks instead of 9 tokens. We run a scalar SSM scan on this short sequence.
-  
-  Because this sequence is Q times shorter, the scan is Q times cheaper. Think of it as: "what is the true accumulated hidden state arriving at the start of each chunk, after accounting for       everything before it?"
+  This is itself a recurrence on a sequence of length T/Q instead of T. In our example, 3 chunks instead of 9 tokens. We run a scalar SSM scan on this short sequence.  
+  Because this sequence is Q times shorter, the scan is Q times cheaper. Think of it as: "what is the true accumulated hidden state arriving at the start of each chunk, after accounting for everything before it?"
 
 4) Step 4 — State-to-output correction (the C-blocks)
 
@@ -684,9 +676,9 @@ The total FLOPs are O($TN^2$) — same as the pure SSM recurrence. But now most 
 
 Building the matrix L requires computing cumulative products like $a_t \cdot a_{t-1} \cdots a_{s+1}$. If $a_t \approx 0.9$ and T=2000, you're computing $0.9^{2000} \approx 10^{-91}$. That vanishes to zero in floating point immediately.
 
-The natural fix is to work in log-space. Instead of multiplying, you add logs: $$ \log(a_t \cdots a_{s+1}) = \log a_t + \cdots + \log a_{s+1} $$
+The natural fix is to work in log-space. Instead of multiplying, you add logs: $$\log(a_t \cdots a_{s+1}) = \log a_t + \cdots + \log a_{s+1}$$
 
-Then $$ L_{ts} = \exp(\text{segsum}(a)_{ts}) $$ where segsum is a "segment sum" — the sum of log-a values over a contiguous segment [s+1,t].
+Then $$L_{ts} = \exp(\text{segsum}(a)_{ts})$$ where segsum is a "segment sum" — the sum of log-a values over a contiguous segment [s+1,t].
 
 
 ### 4.7 The Mamba 2 block ###
