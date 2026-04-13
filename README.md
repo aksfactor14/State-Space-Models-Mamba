@@ -68,9 +68,9 @@ Sequence modelling is a task to map an input sequence x(t), to an output sequenc
   </tbody>
 </table>
 
-**Transformers**: Transformers are the SOTA of modern AI. Their self-attention mechanism is powerful because every token in a sequence can directly attend to every other token — no information gets lost through compression. 
+**Transformers**: Transformers are the SOTA of modern AI. Their self-attention mechanism is powerful because every token in a sequence can directly attend to every other token. This way no information gets lost through compression. 
 
-**The problem**: The power of self attention comes with a cost inherited into the architecture itself. At training time, self-attention is O($N^2$) in both time and memory. At inference, KV-caching reduces this to O(N) per token — but memory still grows linearly with context length.  
+**The problem**: The power of self attention comes with a cost inherited into the architecture itself. At training time, self-attention is O($N^2$) in both time and memory. At inference, KV-caching reduces this to O(N) per token but memory still grows linearly with context length.  
 For a sequence of length N, attention computes a similarity score between every pair of tokens. So, if you double the sequence length, the compute quadruples.
 
 **Aren't RNNs the Answer?**: RNNs(and LSTMs or GRU) compress the entire past into a hidden state $h_t$​, updated step-by-step:
@@ -813,3 +813,13 @@ This gives a per-token average, putting all candidates on equal level regardless
   
 The more interesting finding here is the architectural parity. An SSM with linear-time complexity, no attention, and O(1) inference cost matches a transformer with quadratic attention on a standard reasoning benchmark. That is the core promise of the Mamba line of work — and at least at this scale, it holds up.
 
+## 7 References: ##
+
++ HiPPO: https://arxiv.org/abs/2008.07669
++ S4: https://arxiv.org/abs/2111.00396
++ Mamba1: https://arxiv.org/abs/2312.00752
++ Mamba2: https://arxiv.org/abs/2405.21060
++ Mamba repo: https://github.com/mamba-org/mamba
++ https://newsletter.maartengrootendorst.com/p/a-visual-guide-to-mamba-and-state
++ https://tridao.me/blog/
++ https://www.youtube.com/watch?v=8Q_tqwpTpVU
