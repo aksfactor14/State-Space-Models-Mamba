@@ -4,7 +4,7 @@
 
 Sequence modelling is a task to map an input sequence x(t), to an output sequence y(t). The input signal could be continuous (like in case of audio) or discrete (like in case of text). Continuous input sequence gets mapped to continuous output sequence and discrete input sequence to a discrete output sequence.
 
-**Why study MAMBA and SSMs**: Before we dive into State Space Models, it helps to understand why they exist. To do that, we need to look at the two dominant approaches to sequence modeling: Transformers and RNNs and and understand where each one breaks down.
+**Why study MAMBA and SSMs**: Before we dive into State Space Models, let's understand why they exist. There are two dominant approaches to sequence modeling: Transformers and RNNs. We need to understand where each one breaks down.
 
 
 <table>
@@ -475,7 +475,29 @@ In practice, the fused selective scan is 20–40× faster than standard PyTorch 
 
 <img width="416" height="512" alt="image" src="https://github.com/user-attachments/assets/9dbfee9f-fb5b-41c5-adbc-1c361814d015" />
 
-So, this Mamba architecture's image summarizes the whole flow we have discussed till now. This was Mamba 1.....
+So, this Mamba architecture's image summarizes the whole flow we have discussed till now.
+
+**Input → RMS Norm → Split**
+
+The input tokens ("Kimi", "Antonelli", "is", "associated", "with") are first mapped to embeddings, and then they are RMS Normalized. RMS Norm is a lighter alternative to LayerNorm used in Transformers, it rescales without centering.
+
+After normalization, the signal splits into two parallel paths, each starting with a linear projection that expands the dimension. The right path passes through a SiLU activation. It is a gating branch whose only job is to learn which features are worth keeping. The left path is where the actual computation happens.
+
+**The Left Path: Convolution → SiLU → Selective SSM**
+
+On the left, after projection, there's a short depthwise convolution (kernel size 3–4). This exists because the SSM that follows has no inherent sense of local neighborhood. The convolution cheaply handles nearby token relationships before the SSM does for everything long-range. After the convolution, a SiLU activation, and then the Selective SSM — the S6 from Sections 3.1–3.4. This is where B, C, and Δ are computed as functions of the input using the parallel scan and the model decides what to remember and forget across the entire sequence.
+
+**Gating, Skip Connection, and Output**
+
+The SSM output then gets elementwise multiplied with the right-path gating signal. The right branch has learned for each feature, how much of the SSM's ouput deserves to pass thorugh. This gives the model a second opinion on the SSM's output.
+
+After that, a final linear projection squishes the representation back to the original dimension, and then the skip connection adds the original input back in. Same residual idea to prevent vanishing gradients problem.
+
+This entire block is then stacked n times, with each layer building increasingly abstract representations. After all n blocks, a final RMS Norm is applied, then it is linearly projected to vocabulary size, and a Softmax is applied to produce the predicted next token — [F1] at position 6.
+
+**Why This Works**
+
+See the role of every component — the convolution handles local context cheaply, the selective SSM handles long-range memory efficiently, and the gating branch gives fine-grained output control. And the whole thing runs in linear time with O(1) inference memory. As we'll see in Section 6, this is enough to match and often beat Transformers of the same parameter count on standard benchmarks.
 
 ---
 
