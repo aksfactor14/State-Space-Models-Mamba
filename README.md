@@ -1,5 +1,4 @@
-# State Spaces & Mamba
-This is a blog on State Spaces and Mamba
+# The Elegant Alternative to attention: From HiPPO to Mamba-2
 
 ## 1. Introduction: Sequence Modelling and Existing Methods ##
 
