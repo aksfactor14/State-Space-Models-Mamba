@@ -308,9 +308,6 @@ Notice the new dimension L(sequence length) in these shapes. In S4, B and C had 
 
 This is the selection mechanism. The model is no longer time-invariant. It is now time-varying.
 
-A stays fixed by the way. But since $\mathbf{\overline{A}} = exp(\Delta_t A)$ and $\Delta_t$ is input-dependent so $\mathbf{\overline{A}}$ becomes input dependent too.
-
-
 1) **The projections for $B_t$ and $C_t$:** 
 
   $$B_t = s_B(x_t) = \text{Linear}_N(x_t), \quad B_t \in \mathbb{R}^{B \times L \times N}$$
@@ -349,6 +346,18 @@ This is actually a generalization of LSTM/GRU gating as pointed out in the paper
 
   + Idea:  In particular, if a given input $𝑥_𝑡$ should be completely ignored, all 𝐷 channels should ignore it, and so we project the input down to 1 dimension before repeating/broadcasting         with Δ.
   + This also keeps the parameter count low while still allowing the step size to be data-dependent.
+
+4) **Structure of A**:
+  
+   A stays fixed by the way. But since $\mathbf{\overline{A}} = exp(\Delta_t A)$ and $\Delta_t$ is input-dependent so $\mathbf{\overline{A}}$ becomes input dependent too.
+
+  Recall that the hidden state $h_t \in \mathbb{R}^N$ has N dimensions. The matrix A governs how information flows across these N dimensions over time. In Mamba-1, A is   parameterized as a diagonal matrix of shape (N×N):
+  
+$A = \text{diag}(a_1, a_2, \dots, a_N), \quad A \in \mathbb{R}^{N \times N}$
+
+This means there are no cross-dimensional interactions: dimension i of the hidden state only talks to itself across time, scaled by its own decay value $a_i$​. Each of the N state dimensions has its own independent decay rate. Intuitively, some dimensions of the hidden state can forget slowly (if $a_i \approx 1$) while others forget quickly (if $a_i \approx 0$), giving the model fine-grained control over memory.
+
+This diagonal structure is also a computational choice. It keeps the discretization $\overline{A} = \exp(\Delta_t A)$ cheap, since the matrix exponential of a diagonal matrix is just the elementwise exponential of its diagonal entries.
 
 
 ### 3.2 Why this breaks the convolution trick? ###
@@ -505,7 +514,7 @@ $$M_{ts} = C_t^\top \cdot A_{t:s}^\times \cdot B_s$$
 
 where we have $A_{t:s}^\times = A_t A_{t-1} \cdots A_{s+1}$. (because s<t: lower triangular matrix)
 
-<img width="892" height="458" alt="image" src="https://github.com/user-attachments/assets/ff5cc4dc-2e5c-4e36-b23a-6dc7e9930c79" />
+<img width="775" height="400" alt="image" src="https://github.com/user-attachments/assets/ff5cc4dc-2e5c-4e36-b23a-6dc7e9930c79" />
 
 Thus we wrote the SSM written as a single matrix. This matrix M satisfies some special properties: 
 1) Lower-triangular (causal)
@@ -517,8 +526,7 @@ These kinds of matrices are called **semiseparable matrices**.
 
 A (lower triangular) matrix 𝑀 is N-semiseparable if every submatrix contained in the lower triangular portion (i.e. on or below the diagonal) has rank at most N. We call N the order or rank of the semiseparable matrix.
 
-Why does this matter? Because structured matrices with low-rank off-diagonal blocks have fast algorithms. The paper's central message is this: Different ways of computing SSMs are just different algorithms for multiplying by the semiseparable matrix M.
-
+Why does this matter? Because structured matrices with low-rank off-diagonal blocks have fast algorithms. The paper's central message is this: Different ways of computing SSMs are just different algorithms for multiplying by the semiseparable matrix M.  
 The recurrent scan is one algorithm. The naive attention-like matrix multiply is another. The SSD algorithm (coming next) is third (and it is fastest).
 
 ### 4.4 Duality Property between SSM and attention ###
@@ -686,7 +694,7 @@ Then $$L_{ts} = \exp(\text{segsum}(a)_{ts})$$ where segsum is a "segment sum" �
 
 ### 4.7 The Mamba 2 block ###
 
-<img width="863" height="470" alt="image" src="https://github.com/user-attachments/assets/d8286200-2e8c-4806-88e1-7d60260ba130" />
+<img width="731" height="400" alt="image" src="https://github.com/user-attachments/assets/d8286200-2e8c-4806-88e1-7d60260ba130" />
 
 Mamba 2 architecture is different from Mamba 1's in the following ways:
 
