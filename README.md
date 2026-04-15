@@ -4,7 +4,7 @@
 
 Sequence modelling is a task to map an input sequence x(t), to an output sequence y(t). The input signal could be continuous (like in case of audio) or discrete (like in case of text). Continuous input sequence gets mapped to continuous output sequence and discrete input sequence to a discrete output sequence.
 
-**Why study MAMBA and SSMs**: Before we dive into State Space Models, let's understand why they exist. There are two dominant approaches to sequence modeling: Transformers and RNNs. We need to understand where each one breaks down.
+**Why study MAMBA and SSMs?** Before we dive into State Space Models, let's understand why they exist. The two prevailing approaches to sequence modeling are Transformers and RNNs. We need to understand where each one breaks down.
 
 
 <table>
@@ -66,8 +66,7 @@ Sequence modelling is a task to map an input sequence x(t), to an output sequenc
 
 <img width="267" height="371" alt="image" src="https://github.com/user-attachments/assets/77777ee7-5d0c-4c86-b6e0-193efd26eb03" />
 
-**The problem**: The power of self attention comes with a cost inherited into the architecture itself. At training time, self-attention is O($N^2$) in both time and memory. At inference, KV-caching reduces this to O(N) per token but memory still grows linearly with context length.  
-For a sequence of length N, attention computes a similarity score between every pair of tokens. So, if you double the sequence length, the compute quadruples.
+**The problem**: The power of self attention comes with a cost inherited into the architecture itself. For a sequence length N, at training time, self-attention is O($N^2$) in both time and memory. At inference, KV-caching reduces this to O(N) per token but memory still grows linearly with context length. Attention computes a similarity score between every pair of tokens. So, if you double the sequence length, the compute quadruples.
 
 **Aren't RNNs the Answer?**: RNNs(and LSTMs or GRU) compress the entire past into a hidden state $h_t$​, updated step-by-step:
 
@@ -113,7 +112,7 @@ Note: for now consider A, B, C, D, x(t), h(t) and y(t) to be numbers, not vector
 
 ### 2.2 Addressing long range dependencies using HiPPO ###
 
-HiPPO specifies a class of certain matrices $A ∈ R^N×N$ that when incorporated into SSM, allows the state h(t) to memorize the history of the input x(t). The most important matrix in this class is defined by below equation, which we will call the HiPPO matrix: 
+HiPPO specifies a class of certain matrices $A ∈ R^{N×N}$ that when incorporated into SSM, allows the state h(t) to memorize the history of the input x(t). The most important matrix in this class is defined by below equation, which we will call the HiPPO matrix: 
 
 $$
 A_{nk} = - \begin{cases} 
@@ -129,8 +128,8 @@ At every time step, a sequence model must summarize everything seen so far, not 
 
 <img width="673" height="234" alt="image" src="https://github.com/user-attachments/assets/2904a866-6eaa-4759-8fed-e6bd71a74333" />
 
-**Illustration of the HiPPO framework:** (1) For any function f, (2) at every timet there is an optimal projection $g^{(t)}$ of f onto the space of polynomials, with respect to a measure µ(t) weighing the past. (3)For an appropriately chosen basis,the corresponding coefficients $c(t)∈R^N$ representing a compression of the history of f
-satisfy linear dynamics. (4) Discretizing the dynamics yields an efficient closed-form recurrence for online compression of time series $(f_{k})_{k ∈ N}$
+**Illustration of the HiPPO framework:** (1) For any function f, (2) at every timet there is an optimal projection $g^{(t)}$ of f onto the space of polynomials, with respect to a measure µ(t) weighing the past. (3) For an appropriately chosen basis, the corresponding coefficients $c(t)∈R^N$ representing a compression of the history of f
+satisfy linear dynamics. (4) Discretizing the dynamics yields an efficient closed-form recurrence for online compression of time series $(f_{k})_{k ∈ N}$.
 
 
 **The HiPPO Framework: Online Function Approximation**: Given a measure μ(t) that weights the importance of the past (e.g., "pay more attention to recent history"), HiPPO finds the polynomial g(t) of degree < N that best approximates f upto time t in the L2 sense: 
