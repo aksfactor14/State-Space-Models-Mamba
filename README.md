@@ -129,9 +129,11 @@ For those not interested to know idea behind HiPPO and directly use the above A 
 
 At every time step, a sequence model must summarize everything seen so far, not just the last few tokens. And it must do this with a fixed-size vector. This is a compression problem. HiPPO reframes memory as: at every time t, find the best polynomial approximation of the input history f(x) for x ≤ t. 
 
-<img width="500" height="225" alt="image" src="https://github.com/user-attachments/assets/1f02c940-df91-42d2-93a6-41033621a057" />
+<img width="673" height="234" alt="image" src="https://github.com/user-attachments/assets/2904a866-6eaa-4759-8fed-e6bd71a74333" />
 
-The above diagram summarizes the whole idea of HiPPO.
+**Illustration of the HiPPO framework:** (1) For any function f, (2) at every timet there is an optimal projection $g^{(t)}$ of f onto the space of polynomials, with respect to a measure µ(t) weighing the past. (3)For an appropriately chosen basis,the corresponding coefficients $c(t)∈R^N$ representing a compression of the history of f
+satisfy linear dynamics. (4) Discretizing the dynamics yields an efficient closed-form recurrence for online compression of time series $(f_{k})_{k ∈ N}$
+
 
 **The HiPPO Framework: Online Function Approximation**: Given a measure μ(t) that weights the importance of the past (e.g., "pay more attention to recent history"), HiPPO finds the polynomial g(t) of degree < N that best approximates f upto time t in the L2 sense: 
 
@@ -149,8 +151,7 @@ The A and B matrices here are derived from first principles from the choice of m
 
 **The Three Measure Families**: The choice of measure μ(t) determines what kind of history gets remembered. The paper proposes three families, each with different tradeoffs:
 
-
-<img width="600" height="377" alt="image" src="https://github.com/user-attachments/assets/524e236d-1f93-4772-92b2-dd97d4a556d1" />
+<img width="770" height="371" alt="image" src="https://github.com/user-attachments/assets/bb9affcf-d4f9-4fa4-92d0-059e70aaca98" />
 
 
 1) **LegT (Translated Legendre)** assigns uniform weight to the most recent window [t−θ, t]. This is like a sliding window, it eventually forgets old history as the window slides forward. The window size θ is a hyperparameter which needs to be selected tot match the sequence length. If you mis-specify it, performance drops dramatically.
@@ -447,7 +448,7 @@ Mamba eliminates this with three techniques:
 
   The large intermediate state tensor of shape (B,L,D,N) never touches HBM. It lives and dies in fast SRAM. The number of HBM reads/writes drops by a factor of N.
 
-<img width="440" height="135" alt="image" src="https://github.com/user-attachments/assets/36cfd095-8f2f-4145-98be-f464640ebb0c" />
+<img width="550" height="169" alt="image" src="https://github.com/user-attachments/assets/36cfd095-8f2f-4145-98be-f464640ebb0c" />
 
 
 2) **Trick 2: Recomputation**
@@ -539,7 +540,9 @@ $$M_{ts} = C_t^\top \cdot A_{t:s}^\times \cdot B_s$$
 
 where we have $A_{t:s}^\times = A_t A_{t-1} \cdots A_{s+1}$. (because s<t: lower triangular matrix)
 
-<img width="775" height="400" alt="image" src="https://github.com/user-attachments/assets/ff5cc4dc-2e5c-4e36-b23a-6dc7e9930c79" />
+<img width="714" height="276" alt="image" src="https://github.com/user-attachments/assets/17633c08-d1df-403f-a9a6-e8473d26df60" />
+
+Figure: State Space Models are Semiseparable Matrices. As sequence transformations, state space models can be represented as a matrix transformation M∈R^{(T,T)} acting on the sequence dimension T, sharing the same matrix for each channel in a head (Left). This matrix is a semiseparable matrix (Right), which is a rank-structured matrix where every submatrix contained on-and-below the diagonal (Blue) has rank at most N, equal to the SSM's state dimension.
 
 Thus we wrote the SSM written as a single matrix. This matrix M satisfies some special properties: 
 1) Lower-triangular (causal)
@@ -593,7 +596,8 @@ This can be illustrated through an example, e.g. for T=9 and decomposing into ch
 
 <img width="568" height="390" alt="image" src="https://github.com/user-attachments/assets/ce720d1d-6307-4a38-9a99-cf742028191c" />
 
-<img width="600" height="320" alt="image" src="https://github.com/user-attachments/assets/1de55181-5367-4790-847c-2c757a514189" />
+<img width="719" height="294" alt="image" src="https://github.com/user-attachments/assets/d7549d42-703e-4fc8-9da1-f9efd6f1969c" />
+
 
 + First **Split the Sequence into Chunks**. Let's say our sequence has T=9 tokens and we split into chunks of size Q = 3. So we have 3 chunks:
 
@@ -727,8 +731,7 @@ Mamba 2 architecture is different from Mamba 1's in the following ways:
 
 One more important clarification: 
 
-You might think that making matrix A scalar and tying all N state dimensions to the same decay scalar $a_t$​, are we throwing away too much expressivity?
-
+You might think that making matrix A scalar and tying all N state dimensions to the same decay scalar $a_t$​, are we throwing away too much expressivity?  
 This is okay because: In Mamba-1, the different diagonal values of $A_t$  allowed different parts of the hidden state to forget at different rates. But the $B_t$ and $C_t$​ projections already have full freedom to weight how information enters and exits the state. The scalar $a_t$​ controls the *overall* forgetting rate — whether this timestep matters at all. The paper's ablations confirm this: the scalar restriction doesn't hurt quality, especially when N is increased.
 
 And increasing N is exactly what SSD enables. Mamba-1 was limited to N=16 because the scan cost scaled with N. SSD is dominated by matrix multiplications, so larger N can be used. Mamba-2 uses N=64 or 128 or even 156. More state capacity means the model can remember more — and that turns out to matter a lot.
