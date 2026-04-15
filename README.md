@@ -148,7 +148,7 @@ The A and B matrices here are derived from first principles from the choice of m
 
 **The Three Measure Families**: The choice of measure μ(t) determines what kind of history gets remembered. The paper proposes three families, each with different tradeoffs:
 
-<img width="770" height="371" alt="image" src="https://github.com/user-attachments/assets/bb9affcf-d4f9-4fa4-92d0-059e70aaca98" />
+<img width="616" height="297" alt="image" src="https://github.com/user-attachments/assets/bb9affcf-d4f9-4fa4-92d0-059e70aaca98" />
 
 
 1) **LegT (Translated Legendre)** assigns uniform weight to the most recent window [t−θ, t]. This is like a sliding window, it eventually forgets old history as the window slides forward. The window size θ is a hyperparameter which needs to be selected tot match the sequence length. If you mis-specify it, performance drops dramatically.
