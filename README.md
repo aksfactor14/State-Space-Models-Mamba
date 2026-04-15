@@ -245,7 +245,7 @@ $$\mathbf{\overline{K}} = (\mathbf{C\overline{B}}, \mathbf{C\overline{A}\overlin
 
 $$y = x * \mathbf{\overline{K}}$$
 
-<img width="670" height="333" alt="image" src="https://github.com/user-attachments/assets/08aafb57-856b-4bbd-800f-bcd7d74c84d1" />
+<img width="536" height="265" alt="image" src="https://github.com/user-attachments/assets/08aafb57-856b-4bbd-800f-bcd7d74c84d1" />
 
 Because this kernel is entirely predictable, we completely bypass the sequential step-by-step calculation. We can just take our entire input sequence $\mathbf{x}$ and apply a standard mathematical convolution:
 
@@ -403,16 +403,14 @@ The result: even though $\mathbf{\overline{A}_t}$ and $\mathbf{\overline{B}_t}$�
 
 ### 3.4 Making It Fast on Hardware: The Three Tricks ###
 
-Mamba's selective scan is mathematically elegant. But a naive implementation of S6 would actually be slower than a Transformer. The hardware optimization is what makes the whole thing practical.
+Mamba's selective scan is mathematically elegant but a naive implementation of S6 would be slower than a Transformer. The hardware optimization is what makes the whole thing practical.
 
 **The Real Bottleneck: Memory, Not Compute**
 
 A GPU has two kinds of memory:
 
-1) HBM (High Bandwidth Memory): Large (40–80 GB memory). Slow to access. This is what is usually called "GPU memory."
-2) SRAM (on-chip cache): Tiny (about 20 MB). Extremely fast. This is where the actual compute units live.
-
-Every time you want to run a computation, you first load data from HBM into SRAM, run the math, then write results back to HBM. The math(matrix operations) itself is fast. The loading and writing is slow. The selective scan is IO-bound because it spends most of its time moving data between HBM and SRAM. The bottleneck is how many times we read and write the large intermediate state tensor. This is the exact same problem FlashAttention solved for Transformers. Mamba applies the same philosophy to SSMs.
+1) HBM (High Bandwidth Memory): Large (40–80 GB memory). Slow to access. Also called "GPU memory."
+2) SRAM (on-chip cache): Tiny (about 20 MB). Extremely fast. Actual compute units live here.
 
 **The Problem with a Naive Implementation**
 
@@ -429,17 +427,16 @@ A naive implementation would:
 
 <img width="663" height="138" alt="image" src="https://github.com/user-attachments/assets/1a38c67d-614a-4d37-b54c-b2a45c70402a" />
 
-This crosses the slow HBM-SRAM boundary multiple times, and materializes the full (B,L,D,N) state tensor in HBM each time. That tensor is N times larger than the input/output tensors. This is where the slowness comes from.
+Every time you want to run a computation, you first load data from HBM into SRAM, run the math, then write results back to HBM. The math(matrix operations) itself is fast. The loading and writing is slow. The selective scan is IO-bound because it spends most of its time moving data between HBM and SRAM. The bottleneck is how many times we read and write the large intermediate state tensor. This is the exact same problem FlashAttention solved for Transformers. Mamba applies the same philosophy to SSMs.
 
-This architecture is often referred to as a selective SSM or S6 model since it is an S4 model computed with the selective scan algorithm.
+
+This architecture is referred to as a selective SSM or S6 model since it is an S4 model computed with the selective scan algorithm.
 
 Mamba eliminates this with three techniques:
 
 1) **Kernel Fusion**
-   The idea: instead of running discretization, scan, and multiplication with C as three separate GPU operations (each requiring HBM reads and writes), fuse them into a single CUDA kernel.
+   The idea: instead of running discretization, scan, and multiplication with C as three separate GPU operations (each requiring HBM reads and writes), fuse them into a single CUDA kernel ("kernel" — a small program that runs on the GPU).
 
-  Normally, each GPU operation is a separate "kernel" — a small program that runs on the GPU. Each kernel starts by loading its inputs from HBM and ends by writing its outputs back to HBM.       The next operation immediately needs those outputs so it goes to HBM first, and then loads them again. 
-  
   Kernel fusion merges these separate operations into one. The fused kernel:
 
   1) Loads Δ, A, B, C once from HBM into SRAM.
@@ -457,7 +454,7 @@ Mamba eliminates this with three techniques:
    
   Fusion solves the forward pass. But training requires a backward pass too which needs the intermediate states $h_t$​ to compute gradients.
 
-  Normally, we would save all intermediate states during the forward pass so the backward pass can use them. But those states have shape (B,L,D,N) — saving them would require materializing       that large tensor in HBM, which is exactly what we left in the above section.
+  Normally, we save all intermediate states during the forward pass so the backward pass can use them. But those states have shape (B,L,D,N), saving them would require materializing that large tensor in HBM, which is what we left in the above section.
 
   Mamba's solution: don't save them. Recompute them during the backward pass. When the backward pass needs $h_t$, it re-reads the original inputs Δ, A, B, C from HBM into SRAM and reruns the scan to recompute $h_t$​ on the fly.
 
@@ -467,10 +464,9 @@ Mamba eliminates this with three techniques:
   
 
 3) **Trick 3: Chunking for Very Long Sequences**
-  There's one remaining edge case. SRAM is tiny (about 20 MB). For very long sequences, even the inputs Δ, A, B, C may not fit in SRAM all at once.
+  There is one more point to be considered. SRAM is tiny (about 20 MB). For very long sequences, even the inputs Δ, A, B, C may not fit in SRAM all at once.
 
-  The solution is straightforward intuitive: chunk the sequence. Split the length L sequence into blocks that fit in SRAM. Run the fused kernel on each block. Pass the final hidden state from    one block as the initial state for the next block.
-
+  The solution is straightforward: chunk the sequence. Split the length L sequence into blocks that fit in SRAM. Run the fused kernel on each block. Pass the final hidden state from one block as the initial state for the next block.  
   This lets Mamba scale to arbitrarily long sequences just by adjusting the chunk size to fit SRAM.
 
 **The Combined Effect**: Together, these tricks bring the IO cost of the selective scan from O(BLDN) down to O(BLD+DN).
@@ -486,7 +482,7 @@ So, this Mamba architecture's image summarizes the whole flow we have discussed 
 
 **Input → RMS Norm → Split**
 
-The input tokens ("Kimi", "Antonelli", "is", "associated", "with") are first mapped to embeddings, and then they are RMS Normalized. RMS Norm is a lighter alternative to LayerNorm used in Transformers, it rescales without centering.
+The input tokens ("Kimi", "Antonelli", "is", "associated", "with") are first mapped to embeddings, and then they are RMS Normalized. 
 
 After normalization, the signal splits into two parallel paths, each starting with a linear projection that expands the dimension. The right path passes through a SiLU activation. It is a gating branch whose only job is to learn which features are worth keeping. The left path is where the actual computation happens.
 
