@@ -104,19 +104,26 @@ $$ y(t) = Ch(t)+Dx(t) $$
 
 It maps a 1-D input signal x(t) to an N-D latent state h(t) before projecting to a 1-D output signal y(t).
 
-Our goal is to simply use the SSM as a black-box representation in a deep sequence model, where B,C,D are parameters learned by gradient descent and A is a special HiPPO matrix(covered in upcoming section). For the remainder of this blog, we will omit the parameter D for exposition because the term $Dx$ can be viewed as a skip connection and is easy to compute.
+Our goal is to simply use the SSM as a black-box representation in a deep sequence model, where B,C,D are parameters learned by gradient descent and A is a special HiPPO matrix(covered in section 2.2). For the remainder of this blog, we will omit the parameter D for exposition because the term $Dx$ can be viewed as a skip connection and is easy to compute.
 
 This state space model is linear and time invariant. Linear because the relationships in the expressions above are linear, and time invariant because A,B,C,D do not depend on time(they are fixed).
 
 Note: for now consider A, B, C, D, x(t), h(t) and y(t) to be numbers, not vectors. Later we will extend our analysis to vectors.
 
-**Significance of Matrix A**: The A matrix in the SSM “captures” information from the previous state to build the new state. It determines how this information is propagated over time. Because of this, its structure must be designed carefully—otherwise, it may fail to effectively retain the history of past inputs. To make the A matrix behave well, the authors chose to use the HIPPO theory. Let’s see how it works!
+**Significance of Matrix A**: The A matrix in the SSM “captures” information from the previous state to build the new state. It determines how this information is propagated over time. Because of this, its structure must be designed carefully—otherwise, it may fail to effectively retain the history of past inputs. To make the A matrix behave well, we choose to use the HIPPO theory. Let’s see how it works!
 
 
 ### 2.2 Addressing long range dependencies using HiPPO ###
 
 HiPPO specifies a class of certain matrices $A ∈ R^N×N$ that when incorporated into SSM, allows the state h(t) to memorize the history of the input x(t). The most important matrix in this class is defined by below equation, which we will call the HiPPO matrix: 
-<img width="610" height="110" alt="image" src="https://github.com/user-attachments/assets/71603f1a-5854-402f-861a-524b829d024b" />
+
+$$
+A_{nk} = - \begin{cases} 
+(2n + 1)^{1/2}(2k + 1)^{1/2} & \text{if } n > k \\
+n + 1 & \text{if } n = k \\
+0 & \text{if } n < k 
+\end{cases}
+$$
 
 For those not interested to know idea behind HiPPO and directly use the above A matrix can skip to section 2.3.
 
@@ -141,6 +148,7 @@ $$ \frac{d}{dt} c(t) = A(t) \cdot c(t) + B(t) \cdot f(t) $$
 The A and B matrices here are derived from first principles from the choice of measure, not learned randomly. The state c(t) ∈ ℝᴺ is our hidden state h(t), and it encodes an optimal polynomial summary of the entire input history.
 
 **The Three Measure Families**: The choice of measure μ(t) determines what kind of history gets remembered. The paper proposes three families, each with different tradeoffs:
+
 
 <img width="600" height="377" alt="image" src="https://github.com/user-attachments/assets/524e236d-1f93-4772-92b2-dd97d4a556d1" />
 
@@ -247,7 +255,7 @@ This convolutional trick is why S4 can train lightning-fast using FFTs across th
 
 **Motivating Mamba**: 
 
-The authors of the Mamba paper describe two tasks on which SSM or the S4 do not perform well.
+The two tasks on which SSM or the S4 do not perform well:
 
 1) Selective Copying:
    
@@ -275,9 +283,8 @@ We ended up the section 2 with an insight that S4 models become content blind du
 One obvious solution is to let the SSM parameters be functions of the input. This allows the model to selectively propagate or forget information along the sequence length dimension depending on the current token.
 But the moment we do that, the kernel $\overline{K}$ becomes dependent on input and hence it can no longer be pre-computed. So, the convolution trick breaks.
 
-Mamba's contributions are exactly to solve these problems: Content Awareness & Fast training. 
-
-The authors of the mamba paper propose two methods which we will cover in this section: 
+Mamba's contributions are exactly to solve these problems: Content Awareness & Fast training.  
+To accomplish this, t mamba paper propose two methods which we will cover in this section: 
 
 1) A selective scan algorithm, which allows the model to filter relevant information.
 2) A hardware-aware algorithm that allows for efficient storage of (intermediate) results through parallel scan, kernel fusion, and recomputation.
@@ -544,14 +551,12 @@ Thus we wrote the SSM written as a single matrix. This matrix M satisfies some s
 
 These kinds of matrices are called **semiseparable matrices**. 
 
-### 4.3 What is a semiseperable matrix ? ###
-
 A (lower triangular) matrix 𝑀 is N-semiseparable if every submatrix contained in the lower triangular portion (i.e. on or below the diagonal) has rank at most N. We call N the order or rank of the semiseparable matrix.
 
 Why does this matter? Because structured matrices with low-rank off-diagonal blocks have fast algorithms. The paper's central message is this: Different ways of computing SSMs are just different algorithms for multiplying by the semiseparable matrix M.  
 The recurrent scan is one algorithm. The naive attention-like matrix multiply is another. The SSD algorithm (coming next) is third (and it is fastest).
 
-### 4.4 Duality Property between SSM and attention ###
+### 4.3 Duality Property between SSM and attention ###
 
 Now here's where the scalar-identity restriction on $A_t$​ becomes powerful. If $A_t = a_t \cdot I$, then the product $A_{t:s}^\times = a_t a_{t-1} \cdots a_{s+1}$ is just a scalar. Scalars commute with everything, so we can factor them out of $M_{ts}$​:
 
@@ -575,7 +580,7 @@ Now look at the full output: $Y = MX =  (L \circ C B^T)XY$. Compare this to caus
 This is the duality: the same model can be viewed as either a selective SSM recurrence or a masked linear attention. They compute the exact same output.
 
 
-### 4.5 The SSD algorithm ###
+### 4.4 The SSD algorithm ###
 
 We now have two ways to compute the same model:
 
@@ -705,7 +710,7 @@ The intra-chunk part captures within-chunk interactions. The correction part cap
 
 The total FLOPs are O($TN^2$) — same as the pure SSM recurrence. But now most of those FLOPs go through tensor cores, which are 16× faster than general arithmetic on modern GPUs. That's where the 2–8× speedup over Mamba-1 comes from.
 
-### 4.6 A Numerical Subtlety Worth Knowing ###
+**A Numerical Subtlety Worth Knowing**
 
 Building the matrix L requires computing cumulative products like $a_t \cdot a_{t-1} \cdots a_{s+1}$. If $a_t \approx 0.9$ and T=2000, you're computing $0.9^{2000} \approx 10^{-91}$. That vanishes to zero in floating point immediately.
 
@@ -714,7 +719,7 @@ The natural fix is to work in log-space. Instead of multiplying, you add logs: $
 Then $$L_{ts} = \exp(\text{segsum}(a)_{ts})$$ where segsum is a "segment sum" — the sum of log-a values over a contiguous segment [s+1,t].
 
 
-### 4.7 The Mamba 2 block ###
+### 4.5 The Mamba 2 block ###
 
 <img width="731" height="400" alt="image" src="https://github.com/user-attachments/assets/d8286200-2e8c-4806-88e1-7d60260ba130" />
 
@@ -733,25 +738,22 @@ This is okay because: In Mamba-1, the different diagonal values of $A_t$  allowe
 And increasing N is exactly what SSD enables. Mamba-1 was limited to N=16 because the scan cost scaled with N. SSD is dominated by matrix multiplications, so larger N can be used. Mamba-2 uses N=64 or 128 or even 156. More state capacity means the model can remember more — and that turns out to matter a lot.
 
 
-
-
-
 ---
 
-## 6. Benchmarking Mamba-1, Mamba-2 and Transformers on HellaSwag ##
+## 5. Benchmarking Mamba-1, Mamba-2 and Transformers on HellaSwag ##
 
 To make things practical, I ran zero-shot evaluations on three benchmarks using the lm-evaluation-harness, same like in the Mamba paper. I checked Mamba-1, Mamba-2, and also two transformer baselines.
 
 I could not benchmark Mamba-3 because its pre-trained weights have not been released yet.
 
-### 6.1 Benchmarks Used ###
+### 5.1 Benchmarks Used ###
 
 + **HellaSwag**: A commonsense reasoning benchmark where the model must pick the most plausible continuation of a sentence from four choices. It tests whether the model understands everyday situations and physical common sense.
 + **LAMBADA OpenAI**: Tests whether the model can predict the last word of a passage that requires understanding the broader context of the whole paragraph — not just the last few words. It measures long-range language coherence. Lower perplexity and higher accuracy are both better here.
 + **ARC Challenge**: Comprises of grade-school science questions specifically designed to be hard. Questions that simple word-matching or retrieval cannot answer. It requires reasoning ability.
 
 
-### 6.2 Setup ###
+### 5.2 Setup ###
 
 All models were evaluated zero-shot (n-shot = 0), meaning no examples were provided before testing. The primary metric for HellaSwag and ARC Challenge is acc_norm (length-normalized accuracy) which corrects for the model's natural bias toward shorter answers. For LAMBADA, both perplexity and acc are reported.
 
@@ -762,13 +764,12 @@ Models evaluated:
 + Pythia 1.4B — a transformer trained on the same dataset as Mamba (The Pile), making it the cleanest comparison.
 + TinyLlama 1.1B — a modern transformer using the LLaMA architecture with RoPE, SwiGLU, and grouped query attention
 
-### 6.3 Results ###
+### 5.3 Results ###
 
 <img width="680" height="344" alt="image" src="https://github.com/user-attachments/assets/db536e2a-818d-4f2d-b969-b18107a57a8d" />
 
 
-
-### 6.4 Observations ###
+### 5.4 Observations ###
 
 **HellaSwag**
 
@@ -794,26 +795,10 @@ Models evaluated:
 + On LAMBADA, a perplexity of ~5.0 for Mamba models is strong at this parameter count. For reference, GPT-2 1.5B scores around 8.6. So Mamba at 5.0 with a fewer parameters is performing well on this.
 + On ARC Challenge, scores around 0.30-0.33 reflect how hard this benchmark is. Random chance is 0.25 and even LLaMA-3 8B only reaches ~0.57. ARC requires reasoning that only emerges reliably at much larger scales.
 Across all three, Mamba consistently sits at the top of the 1-1.4B range, which is the key takeaway.
-
-
-#### Clarification about how accuracy is calculated ####
-
-When lm_eval runs HellaSwag, it scores each of the 4 candidate completions by computing the log-probability of that completion given the context. The candidate with the highest log-probability is picked as the answer. Formula for log-probability
-
-$$\log P(\text{completion}) = \sum_{i=1}^{n} \log P(\text{token}_i)$$
-
-Each individual token probability is less than 1, so its log is negative. This means the more tokens a completion has, the more negative its total score becomes because of adding more negative numbers.
-
-acc_norm divides the total log-probability by the number of tokens:
-
-$$\text{acc-norm} = \frac{\log P(\text{completion})}{n}$$
-
-This gives a per-token average, putting all candidates on equal level regardless of length. Hence it is used as the standard metric for HellaSwag.
-
   
 The more interesting finding here is the architectural parity. An SSM with linear-time complexity, no attention, and O(1) inference cost matches a transformer with quadratic attention on a standard reasoning benchmark. That is the core promise of the Mamba line of work — and at least at this scale, it holds up.
 
-## 7 References: ##
+## 6 References: ##
 
 + HiPPO: https://arxiv.org/abs/2008.07669
 + S4: https://arxiv.org/abs/2111.00396
