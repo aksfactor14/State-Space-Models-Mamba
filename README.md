@@ -59,16 +59,12 @@ Sequence modelling is a task to map an input sequence x(t), to an output sequenc
       <td>Simple, fast, parallelizable</td>
       <td>Powerful attention over full context</td>
     </tr>
-    <tr>
-      <td> </td>
-      <td> <img width="796" height="247" alt="image" src="https://github.com/user-attachments/assets/1114871c-b4e2-4cee-8887-dbb834d598de" /> </td>
-      <td><img width="753" height="191" alt="image" src="https://github.com/user-attachments/assets/bf642d47-0659-489e-bf19-d239754982a3" /> </td>
-      <td><img width="592" height="798" alt="image" src="https://github.com/user-attachments/assets/f9f5f84c-e1e2-47b7-a9a1-49dfc2363997" /> </td>
-    </tr>
   </tbody>
 </table>
 
-**Transformers**: Transformers are the SOTA of modern AI. Their self-attention mechanism is powerful because every token in a sequence can directly attend to every other token. This way no information gets lost through compression. 
+**Transformers**: Transformers are the SOTA of modern AI. Their self-attention mechanism is powerful because every token in a sequence can directly attend to every other token. This way no information gets lost through compression.
+
+<img width="267" height="371" alt="image" src="https://github.com/user-attachments/assets/77777ee7-5d0c-4c86-b6e0-193efd26eb03" />
 
 **The problem**: The power of self attention comes with a cost inherited into the architecture itself. At training time, self-attention is O($N^2$) in both time and memory. At inference, KV-caching reduces this to O(N) per token but memory still grows linearly with context length.  
 For a sequence of length N, attention computes a similarity score between every pair of tokens. So, if you double the sequence length, the compute quadruples.
@@ -78,6 +74,8 @@ For a sequence of length N, attention computes a similarity score between every 
 $h_t = f(h_{t-1},x_t)$
 
 This is elegant. A fixed-size memory that gets updated as the sequence progresses and inference is O(1) per token.
+
+<img width="400" height="125" alt="image" src="https://github.com/user-attachments/assets/1114871c-b4e2-4cee-8887-dbb834d598de" />
 
 **Problems with RNNs:**
 1. Vanishing gradients: When training through long sequences, gradients must flow backwards through hundreds of steps. They almost always vanish (or explode) before reaching early tokens. 
@@ -721,7 +719,7 @@ Then $$L_{ts} = \exp(\text{segsum}(a)_{ts})$$ where segsum is a "segment sum" â€
 
 ### 4.5 The Mamba 2 block ###
 
-<img width="731" height="400" alt="image" src="https://github.com/user-attachments/assets/d8286200-2e8c-4806-88e1-7d60260ba130" />
+<img width="787" height="607" alt="image" src="https://github.com/user-attachments/assets/18b7ec30-cb32-4c7e-a457-1168d4b938b6" />
 
 Mamba 2 architecture is different from Mamba 1's in the following ways:
 
