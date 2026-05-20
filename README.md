@@ -25,9 +25,9 @@ Sequence modelling is a task to map an input sequence x(t), to an output sequenc
     </tr>
     <tr>
       <td>Parallelizable (Training)</td>
-      <td>No — O(N)</td>
+      <td>No - O(N)</td>
       <td>Yes</td>
-      <td>Yes — O(N²)</td>
+      <td>Yes - O(N²)</td>
     </tr>
     <tr>
       <td>Inference Complexity</td>
@@ -37,15 +37,15 @@ Sequence modelling is a task to map an input sequence x(t), to an output sequenc
     </tr>
     <tr>
       <td>Training Time Complexity</td>
-      <td>O(N) — sequential</td>
-      <td>O(N · k) — k = kernel size</td>
+      <td>O(N) - sequential</td>
+      <td>O(N · k) - k = kernel size</td>
       <td>O(N²)</td>
     </tr>
     <tr>
       <td>Space Complexity</td>
-      <td>O(1) — fixed hidden state</td>
-      <td>O(k) — kernel size</td>
-      <td>O(N) — KV-Cache grows with sequence</td>
+      <td>O(1) - fixed hidden state</td>
+      <td>O(k) - kernel size</td>
+      <td>O(N) - KV-Cache grows with sequence</td>
     </tr>
     <tr>
       <td>Key Limitation</td>
@@ -107,7 +107,7 @@ This state space model is linear and time invariant. Linear because the relation
 
 Note: for now consider A, B, C, D, x(t), h(t) and y(t) to be numbers, not vectors. Later we will extend our analysis to vectors.
 
-**Significance of Matrix A**: The A matrix in the SSM “captures” information from the previous state to build the new state. It determines how this information is propagated over time. Because of this, its structure must be designed carefully—otherwise, it may fail to effectively retain the history of past inputs. To make the A matrix behave well, we choose to use the HIPPO theory. Let’s see how it works!
+**Significance of Matrix A**: The A matrix in the SSM “captures” information from the previous state to build the new state. It determines how this information is propagated over time. Because of this, its structure must be designed carefully-otherwise, it may fail to effectively retain the history of past inputs. To make the A matrix behave well, we choose to use the HIPPO theory. Let’s see how it works!
 
 
 ### 2.2 Addressing long range dependencies using HiPPO ###
@@ -173,7 +173,7 @@ $$
 c_{k+1} = \left(I - \frac{A}{k}\right)c_k + \frac{1}{k}Bf_k
 $$
 
-Notice that this discrete recurrence does not depend on any step size Δt — the k in the denominator comes entirely from the growing window, making the system intrinsically robust to sampling rate changes.
+Notice that this discrete recurrence does not depend on any step size Δt - the k in the denominator comes entirely from the growing window, making the system intrinsically robust to sampling rate changes.
 
 So to summarize: The A matrix is the HiPPO-LegS A matrix, derived from first principles as the optimal online polynomial compression of the input signal's history. This gives the hidden state h(t) an excellent memory mechanism. We now have a continuous-time SSM with a well-designed A matrix. 
 
@@ -184,12 +184,12 @@ The next challenge is making this practically usable on real discrete data like 
 
 Usually we never work with continuous signals, but always with discrete ones (like text), so how can we produce outputs 𝑦(𝑡) for a discrete signal? Moreover, solving the ODE analytically can be difficult and cumbersome. So, we first need to discretize our system!
 
-Text, audio waveform, or sensor readings aren't a smooth continuous signal — they're a discrete sequence of tokens or samples: $u_0, u_1, u_2, ...$ arriving at fixed intervals. To run an SSM on real data, we need to *discretize* it, i.e., convert those continuous matrices (A,B,C) into discrete counterparts $(\overline{A}, \overline{B}, \overline{C})$  that can step through a sequence one token at a time.
+Text, audio waveform, or sensor readings aren't a smooth continuous signal - they're a discrete sequence of tokens or samples: $u_0, u_1, u_2, ...$ arriving at fixed intervals. To run an SSM on real data, we need to *discretize* it, i.e., convert those continuous matrices (A,B,C) into discrete counterparts $(\overline{A}, \overline{B}, \overline{C})$  that can step through a sequence one token at a time.
 
 **The Step Size $\Delta$**: Represents the time interval between two consecutive inputs. Conceptually, think of each discrete input $u_k = u(k\Delta)$​ as a *sample* of an underlying continuous signal at time t=kΔ.
 
 + A small Δ: means sampling densely which means high resolution. 
-+ A large Δ means coarser steps — the model "skips" more of the underlying dynamics between tokens.
++ A large Δ means coarser steps - the model "skips" more of the underlying dynamics between tokens.
 
 <img width="480" height="155" alt="image" src="https://github.com/user-attachments/assets/925eff2e-99a6-4a83-a50c-23a15836c40b" />
 
@@ -309,7 +309,7 @@ $$
 s_{\Delta}(x_t) = \text{Broadcast}_D(\text{Linear}_1(x_t)) \quad \text{and} \quad \tau_{\Delta} = \text{softplus}
 $$
 
-Notice the new dimension L(sequence length) in these shapes. In S4, B and C had no L dimension — they were the same for every position. Now each token gets its own $B_t$ and $C_t$​.
+Notice the new dimension L(sequence length) in these shapes. In S4, B and C had no L dimension - they were the same for every position. Now each token gets its own $B_t$ and $C_t$​.
 
 This is the selection mechanism. The model is no longer time-invariant. It is now time-varying.
 
@@ -433,7 +433,7 @@ This architecture is referred to as a selective SSM or S6 model since it is an S
 Mamba eliminates this with three techniques:
 
 1) **Kernel Fusion**
-   The idea: instead of running discretization, scan, and multiplication with C as three separate GPU operations (each requiring HBM reads and writes), fuse them into a single CUDA kernel ("kernel" — a small program that runs on the GPU).
+   The idea: instead of running discretization, scan, and multiplication with C as three separate GPU operations (each requiring HBM reads and writes), fuse them into a single CUDA kernel ("kernel" - a small program that runs on the GPU).
 
   Kernel fusion merges these separate operations into one. The fused kernel:
 
@@ -486,7 +486,7 @@ After normalization, the signal splits into two parallel paths, each starting wi
 
 **The Left Path: Convolution → SiLU → Selective SSM**
 
-On the left, after projection, there's a short depthwise convolution (kernel size 3–4). This exists because the SSM that follows has no inherent sense of local neighborhood. The convolution cheaply handles nearby token relationships before the SSM does for everything long-range. After the convolution, a SiLU activation, and then the Selective SSM — the S6 from Sections 3.1–3.4. This is where B, C, and Δ are computed as functions of the input using the parallel scan and the model decides what to remember and forget across the entire sequence.
+On the left, after projection, there's a short depthwise convolution (kernel size 3–4). This exists because the SSM that follows has no inherent sense of local neighborhood. The convolution cheaply handles nearby token relationships before the SSM does for everything long-range. After the convolution, a SiLU activation, and then the Selective SSM - the S6 from Sections 3.1–3.4. This is where B, C, and Δ are computed as functions of the input using the parallel scan and the model decides what to remember and forget across the entire sequence.
 
 **Gating, Skip Connection, and Output**
 
@@ -494,11 +494,11 @@ The SSM output then gets elementwise multiplied with the right-path gating signa
 
 After that, a final linear projection squishes the representation back to the original dimension, and then the skip connection adds the original input back in. Same residual idea to prevent vanishing gradients problem.
 
-This entire block is then stacked n times, with each layer building increasingly abstract representations. After all n blocks, a final RMS Norm is applied, then it is linearly projected to vocabulary size, and a Softmax is applied to produce the predicted next token — [F1] at position 6.
+This entire block is then stacked n times, with each layer building increasingly abstract representations. After all n blocks, a final RMS Norm is applied, then it is linearly projected to vocabulary size, and a Softmax is applied to produce the predicted next token - [F1] at position 6.
 
 **Why This Works**
 
-See the role of every component — the convolution handles local context cheaply, the selective SSM handles long-range memory efficiently, and the gating branch gives fine-grained output control. And the whole thing runs in linear time with O(1) inference memory. As we'll see in Section 6, this is enough to match and often beat Transformers of the same parameter count on standard benchmarks.
+See the role of every component - the convolution handles local context cheaply, the selective SSM handles long-range memory efficiently, and the gating branch gives fine-grained output control. And the whole thing runs in linear time with O(1) inference memory. As we'll see in Section 6, this is enough to match and often beat Transformers of the same parameter count on standard benchmarks.
 
 ---
 
@@ -514,7 +514,7 @@ Mamba-2 answers both problems through an idea called **Structured State Space Du
 
 ### 4.1 $A_t$ as scalar times identity ###
 
-In Mamba-1, $A_t$​ was a diagonal matrix of shape (N×N) which means N independent values along its diagonal — one per state dimension. This meant each of the N elements of the hidden state had its own individual decay rate.
+In Mamba-1, $A_t$​ was a diagonal matrix of shape (N×N) which means N independent values along its diagonal - one per state dimension. This meant each of the N elements of the hidden state had its own individual decay rate.
 
 Mamba-2 makes one small restriction. It forces $A_t$ to be a scalar times identity: $A_t = a_t \cdot I$  
 Instead of N different diagonal values, every element of the hidden state shares the same scalar $a_t∈R$. 
@@ -543,7 +543,7 @@ Figure: State Space Models are Semiseparable Matrices. As sequence transformatio
 
 Thus we wrote the SSM written as a single matrix. This matrix M satisfies some special properties: 
 1) Lower-triangular (causal)
-2) Every submatrix below or on the diagonal is low rank — at most rank N.
+2) Every submatrix below or on the diagonal is low rank - at most rank N.
 
 These kinds of matrices are called **semiseparable matrices**. 
 
@@ -569,9 +569,9 @@ a_2a_1 & a_2 & 1 & \\
 a_3a_2a_1 & a_3a_2 & a_3 & 1
 \end{bmatrix}$$
 
-Each entry $L_{ts}$ denotes *how much does position s still influence position t?* If $a_t$​ values are close to 1, the influence decays slowly. If they're close to 0, it decays fast. Here $a_t$​ is input-dependent — different tokens produce different decay rates.
+Each entry $L_{ts}$ denotes *how much does position s still influence position t?* If $a_t$​ values are close to 1, the influence decays slowly. If they're close to 0, it decays fast. Here $a_t$​ is input-dependent - different tokens produce different decay rates.
 
-Now look at the full output: $Y = MX =  (L \circ C B^T)XY$. Compare this to causal linear attention: $Y = (L_{causal} \circ Q K^T)V$, where $L_{\text{causal}}$  is the standard lower-triangular mask. The two expressions are structurally identical if you rename $(C,B,X) \leftrightarrow (Q,K,V)$. The only difference is the mask. In standard linear attention, L is all ones — every past position contributes equally. In SSD, L is a matrix of decaying cumulative products — far positions contribute less.
+Now look at the full output: $Y = MX =  (L \circ C B^T)XY$. Compare this to causal linear attention: $Y = (L_{causal} \circ Q K^T)V$, where $L_{\text{causal}}$  is the standard lower-triangular mask. The two expressions are structurally identical if you rename $(C,B,X) \leftrightarrow (Q,K,V)$. The only difference is the mask. In standard linear attention, L is all ones - every past position contributes equally. In SSD, L is a matrix of decaying cumulative products - far positions contribute less.
 
 This is the duality: the same model can be viewed as either a selective SSM recurrence or a masked linear attention. They compute the exact same output.
 
@@ -580,8 +580,8 @@ This is the duality: the same model can be viewed as either a selective SSM recu
 
 We now have two ways to compute the same model:
 
-+ SSM (recurrent) mode: Compute $h_t = a_t h_{t-1} + B_t x_t$​ step by step. FLOPs scale as O($TN^2$), linear in sequence length. But it's all scalar operations — no tensor cores.
-+ Attention (quadratic) mode: Materialize $M = L \circ CB^T$ and compute Y=MX. FLOPs scale as O($T^2 N$), quadratic in sequence length. But it's all matrix multiplications — tensor cores used.
++ SSM (recurrent) mode: Compute $h_t = a_t h_{t-1} + B_t x_t$​ step by step. FLOPs scale as O($TN^2$), linear in sequence length. But it's all scalar operations - no tensor cores.
++ Attention (quadratic) mode: Materialize $M = L \circ CB^T$ and compute Y=MX. FLOPs scale as O($T^2 N$), quadratic in sequence length. But it's all matrix multiplications - tensor cores used.
 
 Neither is ideal on its own. The recurrent mode is cheap in FLOPs but hardware-inefficient. The attention mode is hardware-efficient but FLOPs blow up for long sequences. The SSD algorithm combines them. The key idea is a block decomposition of the semiseparable matrix M.
 
@@ -612,7 +612,7 @@ M^{(2,0)} & M^{(2,1)} & M^{(2,2)}
 \end{bmatrix}
 $$
 
-  The upper triangle is all zeros because M is lower triangular (causality — future can't influence past). Now there are two types of blocks. Let's understand each one separately.
+  The upper triangle is all zeros because M is lower triangular (causality - future can't influence past). Now there are two types of blocks. Let's understand each one separately.
 
 + **The Diagonal Blocks**: $M^(0,0), M^{(1,1)}, M^{(2,2)}$ sit on the diagonal. Let's look at $M^{(1,1)}$ as a concrete example. It covers rows {3,4,5} and columns {3,4,5} of M:
 
@@ -659,15 +659,15 @@ C_7^\top a_7 a_6 \\
 C_8^\top a_8 a_7 a_6 
 \end{bmatrix}}_{\text{C-block (chunk 2)}} \cdot \underbrace{(a_5 a_4 a_3)}_{\text{boundary scalar}} \cdot \underbrace{\begin{bmatrix} a_2 a_1 B_0 & a_2 B_1 & B_2 \end{bmatrix}}_{\text{B-block (chunk 0)}}$$
 
-A matrix of shape (3×N) times a scalar times a matrix of shape (N×3). So resultant is (NxN). This is the defining property of semiseparable matrices — all off-diagonal blocks are low rank.
+A matrix of shape (3×N) times a scalar times a matrix of shape (N×3). So resultant is (NxN). This is the defining property of semiseparable matrices - all off-diagonal blocks are low rank.
 
 
-1) Step 1 — Intra-chunk outputs (diagonal blocks)
+1) Step 1 - Intra-chunk outputs (diagonal blocks)
    
    For each chunk j, compute: $Y_j^{\text{intra}} = M^{(j,j)} \cdot X_j$​
     This uses only inputs within the chunk and produces outputs assuming the hidden state entering the chunk is zero. It's a small matrix multiply. All chunks computed in parallel and uses the     Tensor cores.
 
-3) Step 2 — Chunk final states (the B-blocks)
+3) Step 2 - Chunk final states (the B-blocks)
 
   For each chunk j, compute the final hidden state that chunk would produce if it started from zero:
 
@@ -675,9 +675,9 @@ $$
 \text{state}_j = \sum_{s \in \text{chunk } j} (\text{decay from } s \text{ to end of chunk}) \cdot B_s x_s
 $$
 
-  This is the B-block column vector from the low-rank factorization. For chunk 0, this is the vector $[a_2 a_1 B_0 x_0 + a_2 B_1 x_1 + B_2 x_2]$ — i.e. the final state of chunk 0 assuming it     started from zero.
+  This is the B-block column vector from the low-rank factorization. For chunk 0, this is the vector $[a_2 a_1 B_0 x_0 + a_2 B_1 x_1 + B_2 x_2]$ - i.e. the final state of chunk 0 assuming it     started from zero.
 
-3) Step 3 — Pass states across chunks (the boundary scalars)
+3) Step 3 - Pass states across chunks (the boundary scalars)
   Now we need to figure out the true initial state for each chunk, taking into account all the chunks that came before it.
 
   The true initial state of chunk 1 = (boundary scalar) × (local final state of chunk 0).  
@@ -686,7 +686,7 @@ $$
   This is itself a recurrence on a sequence of length T/Q instead of T. In our example, 3 chunks instead of 9 tokens. We run a scalar SSM scan on this short sequence.  
   Because this sequence is Q times shorter, the scan is Q times cheaper. Think of it as: "what is the true accumulated hidden state arriving at the start of each chunk, after accounting for everything before it?"
 
-4) Step 4 — State-to-output correction (the C-blocks)
+4) Step 4 - State-to-output correction (the C-blocks)
 
   Now each chunk knows its true initial state $h_{\text{init}}^{(j)}$​ from Step 3. This initial state also contributes to the outputs within the chunk. We need to add that contribution in.
 
@@ -703,9 +703,9 @@ Final output: $Y^{\text{intra}} + Y^{\text{correction}}$
 
 The intra-chunk part captures within-chunk interactions. The correction part captures how earlier chunks influence later ones through the hidden state.
 
-**Why This Is Fast**: Steps 1, 2, and 4 are all batched matrix multiplications using Tensor cores. Step 3 is a scan — but on a sequence Q times shorter. For Q=64, it's 64× cheaper than a full scan on the original sequence. In practice it takes a negligible fraction of total time.
+**Why This Is Fast**: Steps 1, 2, and 4 are all batched matrix multiplications using Tensor cores. Step 3 is a scan - but on a sequence Q times shorter. For Q=64, it's 64× cheaper than a full scan on the original sequence. In practice it takes a negligible fraction of total time.
 
-The total FLOPs are O($TN^2$) — same as the pure SSM recurrence. But now most of those FLOPs go through tensor cores, which are 16× faster than general arithmetic on modern GPUs. That's where the 2–8× speedup over Mamba-1 comes from.
+The total FLOPs are O($TN^2$) - same as the pure SSM recurrence. But now most of those FLOPs go through tensor cores, which are 16× faster than general arithmetic on modern GPUs. That's where the 2–8× speedup over Mamba-1 comes from.
 
 **A Numerical Subtlety Worth Knowing**
 
@@ -713,7 +713,7 @@ Building the matrix L requires computing cumulative products like $a_t \cdot a_{
 
 The natural fix is to work in log-space. Instead of multiplying, you add logs: $$\log(a_t \cdots a_{s+1}) = \log a_t + \cdots + \log a_{s+1}$$
 
-Then $$L_{ts} = \exp(\text{segsum}(a)_{ts})$$ where segsum is a "segment sum" — the sum of log-a values over a contiguous segment [s+1,t].
+Then $$L_{ts} = \exp(\text{segsum}(a)_{ts})$$ where segsum is a "segment sum" - the sum of log-a values over a contiguous segment [s+1,t].
 
 
 ### 4.5 The Mamba 2 block ###
@@ -729,9 +729,9 @@ Mamba 2 architecture is different from Mamba 1's in the following ways:
 One more important clarification: 
 
 You might think that making matrix A scalar and tying all N state dimensions to the same decay scalar $a_t$​, are we throwing away too much expressivity?  
-This is okay because: In Mamba-1, the different diagonal values of $A_t$  allowed different parts of the hidden state to forget at different rates. But the $B_t$ and $C_t$​ projections already have full freedom to weight how information enters and exits the state. The scalar $a_t$​ controls the *overall* forgetting rate — whether this timestep matters at all. The paper's ablations confirm this: the scalar restriction doesn't hurt quality, especially when N is increased.
+This is okay because: In Mamba-1, the different diagonal values of $A_t$  allowed different parts of the hidden state to forget at different rates. But the $B_t$ and $C_t$​ projections already have full freedom to weight how information enters and exits the state. The scalar $a_t$​ controls the *overall* forgetting rate - whether this timestep matters at all. The paper's ablations confirm this: the scalar restriction doesn't hurt quality, especially when N is increased.
 
-And increasing N is exactly what SSD enables. Mamba-1 was limited to N=16 because the scan cost scaled with N. SSD is dominated by matrix multiplications, so larger N can be used. Mamba-2 uses N=64 or 128 or even 156. More state capacity means the model can remember more — and that turns out to matter a lot.
+And increasing N is exactly what SSD enables. Mamba-1 was limited to N=16 because the scan cost scaled with N. SSD is dominated by matrix multiplications, so larger N can be used. Mamba-2 uses N=64 or 128 or even 156. More state capacity means the model can remember more - and that turns out to matter a lot.
 
 
 ---
@@ -745,7 +745,7 @@ I could not benchmark Mamba-3 because its pre-trained weights have not been rele
 ### 5.1 Benchmarks Used ###
 
 + **HellaSwag**: A commonsense reasoning benchmark where the model must pick the most plausible continuation of a sentence from four choices. It tests whether the model understands everyday situations and physical common sense.
-+ **LAMBADA OpenAI**: Tests whether the model can predict the last word of a passage that requires understanding the broader context of the whole paragraph — not just the last few words. It measures long-range language coherence. Lower perplexity and higher accuracy are both better here.
++ **LAMBADA OpenAI**: Tests whether the model can predict the last word of a passage that requires understanding the broader context of the whole paragraph - not just the last few words. It measures long-range language coherence. Lower perplexity and higher accuracy are both better here.
 + **ARC Challenge**: Comprises of grade-school science questions specifically designed to be hard. Questions that simple word-matching or retrieval cannot answer. It requires reasoning ability.
 
 
@@ -755,10 +755,10 @@ All models were evaluated zero-shot (n-shot = 0), meaning no examples were provi
 
 Models evaluated:
 
-+ Mamba-1 1.4B — the selective SSM from Section 3
-+ Mamba-2 1.3B — the SSD-based architecture from Section 4
-+ Pythia 1.4B — a transformer trained on the same dataset as Mamba (The Pile), making it the cleanest comparison.
-+ TinyLlama 1.1B — a modern transformer using the LLaMA architecture with RoPE, SwiGLU, and grouped query attention
++ Mamba-1 1.4B - the selective SSM from Section 3
++ Mamba-2 1.3B - the SSD-based architecture from Section 4
++ Pythia 1.4B - a transformer trained on the same dataset as Mamba (The Pile), making it the cleanest comparison.
++ TinyLlama 1.1B - a modern transformer using the LLaMA architecture with RoPE, SwiGLU, and grouped query attention
 
 ### 5.3 Results ###
 
@@ -777,22 +777,22 @@ Models evaluated:
 
 1) Both Mamba-1 1.4B and Mamba-2 1.3B achieve perplexity around 5.0, while Pythia sits at 6.09 and TinyLlama at 6.93. This implies Mamba is clearly better at long-range language coherence.
 2) On accuracy, Mamba-2 1.3B scores highest at 0.6555, followed by Mamba-1 1.4B at 0.6493. Both clearly outperform Pythia (0.6158) and TinyLlama (0.5882).
-3) This result makes sense given Mamba's architecture. LAMBADA rewards models that can maintain context over long passages — exactly what SSMs with their efficient state compression are designed to do.
+3) This result makes sense given Mamba's architecture. LAMBADA rewards models that can maintain context over long passages - exactly what SSMs with their efficient state compression are designed to do.
 
 **ARC Challenge**
 
 1) ARC Challenge is the hardest benchmark of the three. Thus, all models are in the 0.28–0.33 range on acc_norm, showing that genuine scientific reasoning remains difficult at this scale of parameters.
 2) Mamba-2 1.3B scores highest at 0.3319, closely followed by Mamba-1 1.4B at 0.3294. Both outperform Pythia (0.2833) and TinyLlama (0.3012).
-3) The fact that both Mamba models beat TinyLlama here is notable — TinyLlama uses a more modern transformer architecture, yet Mamba still edges ahead on reasoning tasks.
+3) The fact that both Mamba models beat TinyLlama here is notable - TinyLlama uses a more modern transformer architecture, yet Mamba still edges ahead on reasoning tasks.
 
 **What These Numbers Mean**: 
 
-+ On HellaSwag, random chance is 0.25 (choosing out of four options), human performance is around 0.95, and models like LLaMA-3 8B reach approximately 0.82. Our models scoring ~0.59-0.60 shows they have learned meaningful language representations, but a large gap to human-level reasoning remains — one that generally closes with scale.
++ On HellaSwag, random chance is 0.25 (choosing out of four options), human performance is around 0.95, and models like LLaMA-3 8B reach approximately 0.82. Our models scoring ~0.59-0.60 shows they have learned meaningful language representations, but a large gap to human-level reasoning remains - one that generally closes with scale.
 + On LAMBADA, a perplexity of ~5.0 for Mamba models is strong at this parameter count. For reference, GPT-2 1.5B scores around 8.6. So Mamba at 5.0 with a fewer parameters is performing well on this.
 + On ARC Challenge, scores around 0.30-0.33 reflect how hard this benchmark is. Random chance is 0.25 and even LLaMA-3 8B only reaches ~0.57. ARC requires reasoning that only emerges reliably at much larger scales.
 Across all three, Mamba consistently sits at the top of the 1-1.4B range, which is the key takeaway.
   
-The more interesting finding here is the architectural parity. An SSM with linear-time complexity, no attention, and O(1) inference cost matches a transformer with quadratic attention on a standard reasoning benchmark. That is the core promise of the Mamba line of work — and at least at this scale, it holds up.
+The more interesting finding here is the architectural parity. An SSM with linear-time complexity, no attention, and O(1) inference cost matches a transformer with quadratic attention on a standard reasoning benchmark. That is the core promise of the Mamba line of work - and at least at this scale, it holds up.
 
 ## 6 References: ##
 
